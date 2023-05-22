@@ -121,6 +121,7 @@ if __name__ == "__main__":
         old_samples = transmittance_sampling(opts.snum, opts.ua, opts.us) + opts.xmin
 
         collections = [new_samples, old_samples, mh_samples]
+        plt.title("Samples visualization")
         plt.violinplot(collections)
         plt.xticks([1, 2, 3], ['RTS samples', 'Transmittance samples', 'Metropolis Hasting'])
         plt.grid(axis = 'both')
