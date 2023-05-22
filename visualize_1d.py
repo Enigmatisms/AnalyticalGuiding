@@ -1,37 +1,17 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from options import get_options
 from mh import MetropolisHasting
+from da import *
 
 """
 TODO:
-1. Backward sampling
-2. half_diffusion_dirichlet
-3. full_diffusion
+(1) Try non-exact temporal sampling case
+(2) Implement all other simpler DEs, and see if our result has consistency
+(3) Implement 2D visualization (Taichi, 2D) and 2D sampling path 
+    - path visualization is suitable for direction sampling, for distance sampling
+    - maybe some better visualization method should be used
 """
-
-SOL = 299792458
-
-def exp_power(x, t, tau, eps, u_a, D, c = SOL):
-    dt = t - tau
-    return np.exp(
-        -((x - eps) ** 2) / (4 * c * D * dt) -  u_a * c * dt
-    )
-
-def half_diffusion_neumann(x, t, tau, eps, u_a, D, c = SOL):
-    """ - x: one-dim position
-        - t: temporal coordinates
-        - tau: the time point of which the emitter starts to emit pulse light
-        - eps: the spatial position of the emitter
-        - c: speed of light (can be unitless)
-        - u_a: absorption coefficient
-        - D: 1 / 3 * (ua + (1 - g) * us)
-    """
-    dt = np.maximum(t - tau, 0)
-    coeff = c * dt / np.sqrt(4 * np.pi * c * D * dt)
-    result = coeff * (exp_power(x, t, tau, -eps, u_a, D, c) + exp_power(x, t, tau, eps, u_a, D, c))
-    return np.where(np.isnan(result), 0, result)
 
 def tr(x, ua, us):
     return np.exp(- (ua + us) * x)
@@ -79,12 +59,13 @@ if __name__ == "__main__":
             ts = opts.xmin - opts.eps - (xs - opts.xmin)
         else:
             ts = np.linspace(opts.eps - opts.xmin, opts.eps - opts.xmax, opts.pnum)
+        ts += opts.t_plus
         travel_dist = xs - opts.xmin
         trs = tr(travel_dist, opts.ua, opts.us)
         D = get_diffusion_length(opts.ua, opts.us)
         solution = half_diffusion_neumann(xs, ts, 0, opts.eps, opts.ua, D, c)
         result = trs * solution
-        print("Diffusion length:", D)
+        print(f"Diffusion length: {D}, time added: {opts.t_plus}")
 
         # Normalize by summation (approximate integral normalization)
         result /= result.sum()
