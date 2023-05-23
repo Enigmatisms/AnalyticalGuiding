@@ -21,6 +21,10 @@ def get_options(delayed_parse = False):
     parser.add_argument("--tmin",    default = 0.5, help = "Minimum t", type = float)
     parser.add_argument("--tmax",    default = 1.5, help = "Maximum t", type = float)
     parser.add_argument("--t_point", default = 1.0, help = "Point t", type = float)
+    
+    # 注意此处，t plus 的意思是在原始剩余时间上增加的时间。原始剩余时间（RT）根据当前路径到光源入射t = 0点的最短路去算
+    # 假设我们希望 sample 别的时间点（大于最短路的时间点）, 则可以设置此时间
+    parser.add_argument("--t_plus",  default = 0.0, help = "Delta time added to the residual time calculated", type = float)
 
     parser.add_argument("--pnum",    default = 1000, help = "Number of points to draw", type = int)
     parser.add_argument("--snum",    default = 5000, help = "Number of samples", type = int)
