@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 from options import get_options
 from mh import MetropolisHasting
 from da import *
+from colors import COLORS
+from functools import partial
 
 """
 TODO:
@@ -12,6 +14,8 @@ TODO:
     - path visualization is suitable for direction sampling, for distance sampling
     - maybe some better visualization method should be used
 """
+
+solutions = {"h_n": half_diffusion, "h_d": partial(half_diffusion, sub = True), "full": full_diffusion}
 
 def tr(x, ua, us):
     return np.exp(- (ua + us) * x)
@@ -36,13 +40,13 @@ def transmittance_sampling(sample_num:int, ua: float, us: float):
     xs = np.random.uniform(0, 1, sample_num)
     return -np.log(1 - xs) / ut
 
-def forward_eval_func(opts, D: float, c: float):
+def forward_eval_func(opts, func, t_plus: float, D: float, c: float):
     return lambda x: tr(x - opts.xmin, opts.ua, opts.us) * \
-        half_diffusion_neumann(x, opts.eps - x, 0, opts.eps, opts.ua, D, c)
+        func(x, t_plus + opts.eps - x, 0, opts.eps, opts.ua, D, c)
 
-def backward_eval_func(opts, D: float, c: float):
+def backward_eval_func(opts, func, t_plus: float, D: float, c: float):
     return lambda x: tr(x - opts.xmin, opts.ua, opts.us) * \
-        half_diffusion_neumann(x, opts.xmin - opts.eps - (x - opts.xmin), 0, opts.eps, opts.ua, D, c)
+        func(x, t_plus + opts.xmin - opts.eps - (x - opts.xmin), 0, opts.eps, opts.ua, D, c)
 
 if __name__ == "__main__":
     opts = get_options()
@@ -59,20 +63,34 @@ if __name__ == "__main__":
             ts = opts.xmin - opts.eps - (xs - opts.xmin)
         else:
             ts = np.linspace(opts.eps - opts.xmin, opts.eps - opts.xmax, opts.pnum)
-        ts += opts.t_plus
         travel_dist = xs - opts.xmin
         trs = tr(travel_dist, opts.ua, opts.us)
         D = get_diffusion_length(opts.ua, opts.us)
-        solution = half_diffusion_neumann(xs, ts, 0, opts.eps, opts.ua, D, c)
-        result = trs * solution
-        print(f"Diffusion length: {D}, time added: {opts.t_plus}")
+        print(f"Diffusion length: {D}, time points to compare: {opts.t_plus_num}, time added: {opts.t_plus_val}")
+
+        diffusion_solution = solutions[opts.func]
+        solutions       = []
+        results         = []
+        solution_labels = []
+        result_labels   = []
+        # For the convenience of making better comparison
+        for i in range(opts.t_plus_num + 1):
+            t_plus = i * opts.t_plus_val
+            ts_use = ts + t_plus 
+            solution = diffusion_solution(xs, ts_use, 0, opts.eps, opts.ua, D, c)
+            result = trs * solution
+            result /= result.sum()
+            solutions.append(solution)
+            results.append(result)
+            solution_labels.append(f"DA, tplus = {t_plus:.3f}")
+            result_labels.append(f"Tr * DA, tplus = {t_plus:.3f}")
 
         # Normalize by summation (approximate integral normalization)
-        result /= result.sum()
         normalized_trs = trs / trs.sum()
         plt.figure(0)
-        plt.plot(xs, result, c = 'r', label = 'tr * diffusion solution')
-        plt.plot(xs, normalized_trs, c = 'b', label = 'tr')
+        plt.plot(xs, normalized_trs, color = COLORS[0], label = 'Tr')
+        for i, (result, label) in enumerate(zip(results, result_labels)):
+            plt.plot(xs, result, c = COLORS[i + 1], label = label)
         plt.legend()
         plt.title("RTS and traditional sampling curve comparison")
         plt.grid(axis = 'both')
@@ -84,27 +102,33 @@ if __name__ == "__main__":
         plt.grid(axis = 'both')
 
         plt.subplot(2, 1, 2)
-        plt.plot(xs, solution, c = 'r', label = 'solution')
-        plt.title("DA solution")
+        for i, (solution, label) in enumerate(zip(solutions, solution_labels)):
+            plt.plot(xs, solution /solution.sum(), c = COLORS[i], label = label)
+        plt.title("DA solutions: To be investigated (more)")
         plt.legend()
         plt.grid(axis = 'both')
 
         plt.figure(2)
-        integral = normalized_integral(result)
-        trs_integral = normalized_integral(trs)
-        new_samples = inverse_sampling(integral, xs, opts.snum)
+        x_ticks = [1, 2]
+        labels = ['Transmittance', 'Metropolis']
         if opts.backward:
-            eval_func = backward_eval_func(opts, D, c)
+            eval_func = backward_eval_func(opts, diffusion_solution, 0, D, c)
         else:
-            eval_func = forward_eval_func(opts, D, c)
+            eval_func = forward_eval_func(opts, diffusion_solution, 0, D, c)
         mh_samples = MetropolisHasting.get_samples(eval_func, opts.ua + opts.us, opts.snum, opts.xmin, opts.xmax)
-        # old_samples = inverse_sampling(trs_integral, xs, opts.snum)
         old_samples = transmittance_sampling(opts.snum, opts.ua, opts.us) + opts.xmin
 
-        collections = [new_samples, old_samples, mh_samples]
+        collections = [old_samples, mh_samples]
+        for i, result in enumerate(results):
+            integral = normalized_integral(result)
+            new_samples = inverse_sampling(integral, xs, opts.snum)
+            x_ticks.append(i + 3)
+            collections.append(new_samples)
+            labels.append(f"RTS, t={i * opts.t_plus_val:.3f}")
+
         plt.title("Samples visualization")
-        plt.violinplot(collections)
-        plt.xticks([1, 2, 3], ['RTS samples', 'Transmittance samples', 'Metropolis Hasting'])
+        plt.violinplot(collections, showmeans = True)
+        plt.xticks(x_ticks, labels)
         plt.grid(axis = 'both')
         plt.show()
     else:                       # fix a temporal point and examine the intensity changes induced by time changes
