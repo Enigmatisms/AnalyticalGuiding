@@ -38,3 +38,25 @@ def get_options(delayed_parse = False):
     if delayed_parse:
         return parser
     return parser.parse_args()
+
+def get_options_2d(delayed_parse = False):
+    # IO parameters
+    parser = configargparse.ArgumentParser()
+    parser.add_argument('-c', '--config',  
+                                     is_config_file=True, help='Config file path')
+    parser.add_argument("--ua",       default = 0.02, help = "absorption coeff", type = float)
+    parser.add_argument("--us",       default = 10.0, help = "scattering coeff", type = float)
+    parser.add_argument("--emitter_pos",      
+                                      default = 1.0, help = "Position of the emitter", type = float)
+    parser.add_argument("--max_time", default = 1.5, help = "Maximum t", type = float)
+    parser.add_argument("--time",     default = 0.1, help = "Initial time", type = float)
+    parser.add_argument("--width",    default = 720, help = "Canvas width", type = int)
+    parser.add_argument("--height",   default = 720, help = "Canvas height", type = int)
+    parser.add_argument("--scale",    default = 300, help = "Canvas initial scaling", type = float)
+    parser.add_argument("--v_scale",  default = 2, help = "Image value initial scaling", type = float)
+    parser.add_argument("--diffuse_mode",    
+                                      default = 0, choices=[0, 1], help = "Diffusion function to use, 0 = full, 1 = half", type = int)
+    parser.add_argument("--mode",     default = 'da_only', choices=['da_only', 'da_tr'], help = "Visualization mode", type = str)
+    if delayed_parse:
+        return parser
+    return parser.parse_args()

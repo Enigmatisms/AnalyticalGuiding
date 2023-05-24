@@ -13,15 +13,14 @@ TODO:
 (3) Implement 2D visualization (Taichi, 2D) and 2D sampling path 
     - path visualization is suitable for direction sampling, for distance sampling
     - maybe some better visualization method should be used
+
+- [ ] Check if all the computation is physically plausible (causality)
 """
 
-solutions = {"h_n": half_diffusion, "h_d": partial(half_diffusion, sub = True), "full": full_diffusion}
+solution_funcs = {"h_n": half_diffusion, "h_d": partial(half_diffusion, sub = True), "full": full_diffusion}
 
 def tr(x, ua, us):
     return np.exp(- (ua + us) * x)
-
-def get_diffusion_length(u_a, u_s, g = 0):
-    return 1 / (3 * (u_a + (1 - g) * u_s))
 
 def normalized_integral(values: np.ndarray) -> np.ndarray:
     results = np.cumsum(values)
@@ -68,7 +67,7 @@ if __name__ == "__main__":
         D = get_diffusion_length(opts.ua, opts.us)
         print(f"Diffusion length: {D}, time points to compare: {opts.t_plus_num}, time added: {opts.t_plus_val}")
 
-        diffusion_solution = solutions[opts.func]
+        diffusion_solution = solution_funcs[opts.func]
         solutions       = []
         results         = []
         solution_labels = []
@@ -103,7 +102,7 @@ if __name__ == "__main__":
 
         plt.subplot(2, 1, 2)
         for i, (solution, label) in enumerate(zip(solutions, solution_labels)):
-            plt.plot(xs, solution /solution.sum(), c = COLORS[i], label = label)
+            plt.plot(xs, solution, c = COLORS[i], label = label)
         plt.title("DA solutions: To be investigated (more)")
         plt.legend()
         plt.grid(axis = 'both')
@@ -133,3 +132,4 @@ if __name__ == "__main__":
         plt.show()
     else:                       # fix a temporal point and examine the intensity changes induced by time changes
         raise NotImplementedError("This branch is not yet implemented")
+    
