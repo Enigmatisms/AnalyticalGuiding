@@ -44,6 +44,7 @@ def get_options_2d(delayed_parse = False):
     parser = configargparse.ArgumentParser()
     parser.add_argument('-c', '--config',  
                                      is_config_file=True, help='Config file path')
+    parser.add_argument("--v_pos",    default = 0.1, help = "Vertex position", type = float)
     parser.add_argument("--ua",       default = 0.02, help = "absorption coeff", type = float)
     parser.add_argument("--us",       default = 10.0, help = "scattering coeff", type = float)
     parser.add_argument("--emitter_pos",      
