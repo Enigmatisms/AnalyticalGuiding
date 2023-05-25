@@ -28,14 +28,13 @@ class DiffusionVizBase:
         self.setter(prop)
 
     def setter(self, configs: dict):
-        self._v_scale[None]     = configs['v_scale']
-        self._max_time[None]    = configs['max_time']
-        self._emitter_pos[None] = configs['emitter_pos']
-        self._time[None]        = configs['time']
-        self._scale[None]       = configs['scale']
-        self.coeffs[0]          = configs['us']
-        self.coeffs[1]          = configs['ua']
-        self.coeffs[2]          = configs['ua'] + configs['us']
+        self._v_scale[None] = configs['v_scale']
+        self.max_time       = configs['max_time']
+        self.emitter_pos    = configs['emitter_pos']
+        self.time           = configs['time']
+        self.scale          = configs['scale']
+        self.coeffs[1]      = configs['ua']
+        self.us             = configs['us']
 
     @property
     def us(self):
@@ -99,7 +98,7 @@ class DiffusionVizBase:
     def scale(self, val):
         if val <= 0.0:
             raise ValueError("Scale should be positive")
-        self.scale[None] = val
+        self._scale[None] = val
 
     @property
     def v_scale(self):

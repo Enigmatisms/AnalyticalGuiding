@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 from options import get_options
 from mh import MetropolisHasting
 from da import *
-from colors import COLORS
 from functools import partial
+from utils.colors import COLORS
 
 """
 TODO:

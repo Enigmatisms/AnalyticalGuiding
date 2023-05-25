@@ -11,15 +11,21 @@
 
 import numpy as np
 import taichi as ti
+from taichi.math import vec2
 import dearpygui.dearpygui as dpg
 
 from copy import deepcopy
 from options import get_options_2d
 from diffusion_viz import DiffusionViz
+from utils.create_plot import PlotTools
+from utils.ctrl_utils import ControlInfo
+from utils.analysis_2d import AnalysisTool
 
 """ TODO:
 (1) Add analysis code (for sampling in a specific direction)
     displaying the path length and visualize path
+    Specifically: given a direction and a max length (set by mouse)
+    calculate and sample along the direction, then do the visualization
 """
 
 SKIP_PARAMS = {"width", "height", "diffuse_mode", "mode"}
@@ -30,13 +36,20 @@ def value_sync(set_tag: str):
         dpg.set_value(set_tag, app_data)
     return value_sync_inner
 
-def create_slider(label: str, tag: str, min_v: float, max_v: float, default: float):
+def create_slider(label: str, tag: str, min_v: float, max_v: float, default: float, in_type: str = "float"):
     """ Create horizontally grouped (and synced) input box and slider """
-    with dpg.group(horizontal = True):
-        dpg.add_input_float(tag = f"{tag}_input", default_value = default, 
-                                width = 110, callback = value_sync(tag))
-        dpg.add_slider_float(label = label, tag = tag, min_value = min_v,
-                            max_value = max_v, default_value = default, width = 120, callback = value_sync(f"{tag}_input"))
+    if in_type == "float":
+        with dpg.group(horizontal = True):
+            dpg.add_input_float(tag = f"{tag}_input", default_value = default, 
+                                    width = 110, callback = value_sync(tag))
+            dpg.add_slider_float(label = label, tag = tag, min_value = min_v,
+                                max_value = max_v, default_value = default, width = 120, callback = value_sync(f"{tag}_input"))
+    else:
+        with dpg.group(horizontal = True):
+            dpg.add_input_int(tag = f"{tag}_input", default_value = default, 
+                                    width = 110, callback = value_sync(tag))
+            dpg.add_slider_int(label = label, tag = tag, min_value = min_v,
+                                max_value = max_v, default_value = default, width = 120, callback = value_sync(f"{tag}_input"))
 
 def value_updator(config_dict: dict, skip_params: set):
     """ Get values from sliders """
@@ -45,18 +58,21 @@ def value_updator(config_dict: dict, skip_params: set):
         config_dict[attr] = dpg.get_value(attr)
     return config_dict
 
-def button_callback(sender):
+def radio_callback(sender, app_data):
     """ Setting plot mode via button press """
     global mode
-    mode = sender
-    if mode == "da_only":
+    if app_data == "DA only":
+        mode = "da_only"
         dpg.set_value("v_scale", -1.5)
+        dpg.set_value("v_scale_input", -1.5)
         dpg.configure_item("max_time", label = "Max time")
         dpg.configure_item("time", label = "Time")
     else:
+        mode = "da_tr"
         dpg.configure_item("max_time", label = "Target time")
         dpg.configure_item("time", label = "Sampled time")
-        dpg.set_value("v_scale", 6)
+        dpg.set_value("v_scale", 3)
+        dpg.set_value("v_scale_input", 3)
 
 def esc_callback(sender, app_data):
     """ Exit on pressing ESC """
@@ -65,11 +81,11 @@ def esc_callback(sender, app_data):
 
 def key_callback(sender, app_data):
     """ Keyboard responses to be used """
-    global vertex_x
+    global ctrl
     if app_data == 65:
-        vertex_x -= 0.02
+        ctrl.vertex_x -= 0.02
     elif app_data == 68:
-        vertex_x += 0.02
+        ctrl.vertex_x += 0.02
 
 def pad_rgba(img: np.ndarray):
     """ Convert RGB images to RGBA images """
@@ -84,21 +100,44 @@ def dist_sample_callback():
 
 def reset_callback():
     """ Reset configurations to the initial state """
-    global config_dict, init_configs, mode
+    global config_dict, init_configs, mode, ctrl, opts
     config_dict.update(init_configs)
     for attr in config_dict.keys():
         if attr in SKIP_PARAMS: continue
         dpg.set_value(attr, init_configs[attr])
         dpg.set_value(f"{attr}_input", init_configs[attr])
-    button_callback(config_dict["mode"])
+    ctrl.reset(opts.v_pos)
+    mode_name = "DA only" if config_dict["mode"] == "da_only" else "DA Tr"
+    radio_callback(None, mode_name)
     dpg.set_value("use_tr", True)
     dpg.set_value("use_wvf", True)
     dpg.set_value("dist_sample", True)
 
+def pdf_draw_callback():
+    global ctrl
+    ctrl.calculate_pdf = ctrl.dir_selected
+
+def sampling_callback():
+    global ctrl
+    ctrl.calculate_sample = ctrl.dir_selected
+
+def analysis_win_callback():
+    val = dpg.get_item_configuration("plots")["show"]
+    dpg.configure_item("plots", show = not val)
+
+def mouse_release_callback(sender, app_data):
+    global ctrl, config_dict
+    if app_data == 1:       # Freeze scale
+        scale = config_dict["scale"]
+        ctrl.pos_x, ctrl.pos_y = dpg.get_mouse_pos()
+        ctrl.pos_x /= scale
+        ctrl.pos_y /= scale
+        ctrl.dir_selected = True
+
 if __name__ == "__main__":
     ti.init(arch = ti.cuda, default_fp = ti.f32, default_ip = ti.i32, device_memory_fraction = 0.4)
     opts = get_options_2d()
-    vertex_x  = opts.v_pos
+    ctrl = ControlInfo(opts.v_pos)
 
     config_dict = {}
     for attr in dir(opts):
@@ -109,6 +148,7 @@ if __name__ == "__main__":
     init_configs = deepcopy(config_dict)
 
     diff_viz = DiffusionViz(config_dict)
+    analyzer = AnalysisTool(sol = 1, diff_mode = opts.diffuse_mode, max_ray_march_num = opts.rm_num, sample_num = opts.samp_num)
     dpg.create_context()
 
     with dpg.texture_registry(show=False):
@@ -117,23 +157,30 @@ if __name__ == "__main__":
 
     with dpg.window(label="Diffusion Display", tag = "display", no_bring_to_front_on_focus = True):
         dpg.add_image("diffusion")
-        # TODO: a lot of sliders to be added
+        # Vertex position
         dpg.draw_circle((opts.v_pos * opts.scale, diff_viz.cy), 5, fill = (0, 0, 255, 128), tag=f"vertex")
+        # Emitter position
         dpg.draw_circle((opts.emitter_pos * opts.scale, diff_viz.cy), 5, fill = (255, 0, 0, 128), tag=f"emitter")
+        # Sampling 'ring'
         dpg.draw_circle((opts.v_pos * opts.scale, diff_viz.cy), 20, color = (255, 255, 255, 100), tag=f"ring")
+        # Emission wavefront
         dpg.draw_circle((opts.emitter_pos * opts.scale, diff_viz.cy), 
                         opts.time * opts.scale, color = (255, 255, 255, 80), tag=f"wavefront")
-        dpg.draw_circle((0, 0), 20, color = (255, 255, 255, 100), tag=f"test")
+        # Sampling direction
+        dpg.draw_line((0, 0), 20, color = (255, 255, 255, 80), tag=f"sample_dir", show = False)
+        # Length indicating arrow
         dpg.draw_arrow((opts.v_pos * opts.scale, opts.height - 40), 
                        (opts.emitter_pos * opts.scale, opts.height - 40),
                         tag = "to_emitter", color = (100, 100, 255, 128)
                        )
+        # Length annotation
         dpg.draw_text(((opts.v_pos + opts.emitter_pos) * opts.scale * 0.5 - 32, opts.height - 64), 
                       f"L: {abs(opts.emitter_pos - opts.v_pos):.4f}", tag = "to_emitter_str", size = 20)
 
     with dpg.handler_registry():
         dpg.add_key_release_handler(callback=esc_callback)
         dpg.add_key_press_handler(callback=key_callback)
+        dpg.add_mouse_release_handler(callback=mouse_release_callback)
 
     with dpg.window(label="Control panel", tag = "control"):
         create_slider("Value scale", "v_scale", -3, 10, opts.v_scale)
@@ -142,16 +189,39 @@ if __name__ == "__main__":
         create_slider("Emitter position", "emitter_pos", 0.05, 5.0, opts.emitter_pos)
         create_slider("Canvas scale", "scale", 10.0, 1000.0, opts.scale)
         create_slider("Sigma A", "ua", 0.01, 1.0, opts.ua)
-        create_slider("Sigma S", "us", 5.0, 200.0, opts.us)
+        create_slider("Sigma S", "us", 1.0, 200.0, opts.us)
+        create_slider("Ray marching", "rm_num", 32, 256, opts.rm_num, "int")
+        create_slider("Sample num", "samp_num", 64, 4096, opts.samp_num, "int")
+        create_slider("Bin num", "bin_num", 10, 100, opts.bin_num, "int")
+
         with dpg.group(horizontal = True):
             dpg.add_checkbox(label = 'Distance sampling', tag = 'dist_sample', 
                              default_value = True, callback = dist_sample_callback)
             dpg.add_checkbox(label = 'Use Tr', tag = 'use_tr', default_value = True)
             dpg.add_checkbox(label = 'Wavefront', tag = 'use_wvf', default_value = True)
         with dpg.group(horizontal = True):
-            dpg.add_button(label = 'DA only', tag = 'da_only', width = 100, callback = button_callback)
-            dpg.add_button(label = 'DA Tr', tag = 'da_tr', width = 100, callback = button_callback)
-            dpg.add_button(label = 'Reset', tag = 'reset', width = 100, callback = reset_callback)
+            default_ratio_v = "DA only" if mode == "da_only" else "DA Tr"
+            dpg.add_radio_button(["DA only", "DA Tr"], horizontal = True, 
+                        default_value = default_ratio_v, callback = radio_callback, tag = "mode_select")
+            dpg.add_radio_button(["remaining", "forward"], horizontal = True, 
+                        default_value = "forward", tag = "time_select")
+        with dpg.group(horizontal = True):
+            dpg.add_button(label = 'Reset', tag = 'reset', width = 120, callback = reset_callback)
+            dpg.add_button(label = 'Plot show', tag = 'plot_show', width = 120, callback = analysis_win_callback)
+        with dpg.group(horizontal = True):
+            dpg.add_button(label = 'Draw PDF', tag = 'draw_pdf', width = 120, callback = pdf_draw_callback)
+            dpg.add_button(label = 'Draw sample', tag = 'draw_sample', width = 120, callback = sampling_callback)
+        if mode == "da_only":
+            dpg.configure_item("max_time", label = "Max time")
+            dpg.configure_item("time", label = "Time")
+        else:
+            dpg.configure_item("max_time", label = "Target time")
+            dpg.configure_item("time", label = "Sampled time")
+
+    with dpg.window(label="2D analytical result plots", tag="plots", show = False, pos = (opts.width + 50, 0),
+                    no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
+        PlotTools.make_plot(540, 270, "Sampling PDF plot", ["Transmittance", "DA (* Tr)"], opts.rm_num)
+        PlotTools.make_plot(540, 270, "Sampled distances", ["Tr sample", "RTS"], [opts.bin_num, opts.bin_num], mode = "bar")
 
     dpg.create_viewport(title='Analytical Guiding 2D visualization', width=opts.width + 50, height=opts.height + 100)
     dpg.setup_dearpygui()
@@ -163,32 +233,74 @@ if __name__ == "__main__":
     while dpg.is_dearpygui_running():
         dpg.render_dearpygui_frame()
         diff_viz.pixels.fill(0)
+        ctrl.use_tr      = dpg.get_value("use_tr")
         config_dict = value_updator(config_dict, SKIP_PARAMS)
         diff_viz.setter(config_dict)
-        use_tr    = dpg.get_value("use_tr")
+        analyzer.setter(config_dict)
 
-        dpg.configure_item("emitter", center = (config_dict["emitter_pos"] * config_dict["scale"], diff_viz.cy))
-        dpg.configure_item("vertex", center = (vertex_x * config_dict["scale"], diff_viz.cy))
-        dpg.configure_item("ring", center = (vertex_x * config_dict["scale"], diff_viz.cy),
-                radius = config_dict["scale"] * config_dict["time"])
-        dpg.configure_item("wavefront", center = (config_dict["emitter_pos"] * config_dict["scale"], diff_viz.cy),
-                radius = config_dict["scale"] * config_dict["time"])
+        emitter_pos = config_dict["emitter_pos"]
+        set_scale = config_dict["scale"]
+
+        dpg.configure_item("emitter", center = (emitter_pos * set_scale, diff_viz.cy))
+        dpg.configure_item("vertex", center = (ctrl.vertex_x * set_scale, diff_viz.cy))
+        
         dpg.configure_item("to_emitter", 
-                p1 = (vertex_x * config_dict["scale"], opts.height - 40),
-                p2 = (config_dict["emitter_pos"] * config_dict["scale"], opts.height - 40))
-        text_x_pos = (config_dict["emitter_pos"] + vertex_x) * config_dict["scale"] * 0.5 - 32
+                p1 = (ctrl.vertex_x * set_scale, opts.height - 40),
+                p2 = (emitter_pos * set_scale, opts.height - 40))
+        text_x_pos = (emitter_pos + ctrl.vertex_x) * set_scale * 0.5 - 32
         dpg.configure_item("to_emitter_str", 
                 pos = (text_x_pos, opts.height - 64),
-                text = f"L: {abs(config_dict['emitter_pos'] - vertex_x):.4f}"
+                text = f"L: {abs(emitter_pos - ctrl.vertex_x):.4f}"
                 )
         dpg.configure_item("time", max_value = config_dict['max_time'])
+        dpg.configure_item("ring", center = (ctrl.vertex_x * set_scale, diff_viz.cy),
+                radius = set_scale * config_dict["time"])
+        if mode == 'da_only':
+            dpg.configure_item("wavefront", center = (emitter_pos * set_scale, diff_viz.cy),
+                    radius = set_scale * config_dict["time"])
+        else:
+            dpg.configure_item("wavefront", center = (emitter_pos * set_scale, diff_viz.cy),
+                    radius = set_scale * (config_dict["max_time"] - config_dict['time']))
+        if ctrl.dir_selected:
+            dpg.configure_item("sample_dir", 
+                p1 = (ctrl.vertex_x * set_scale, diff_viz.cy), 
+                p2 = (ctrl.pos_x * set_scale, ctrl.pos_y * set_scale), show = True)
+
+        if ctrl.calculate_pdf:
+            ctrl.calculate_pdf = False
+            
+            scale = diff_viz.scale
+            eps_y = diff_viz.cy / scale
+            target = vec2([ctrl.pos_x, ctrl.pos_y])
+            target_time = -1 if dpg.get_value("time_select") == "forward" else config_dict["max_time"]
+            ctrl.length = analyzer.ray_marching(ctrl.vertex_x, eps_y, emitter_pos, eps_y, 
+                                  config_dict["ua"], config_dict["us"], target, ctrl.use_tr, target_time)
+            xs = np.linspace(0, ctrl.length, analyzer.max_ray_march_num + 1)[1:]
+            transmittance  = analyzer.transmittance
+            transmittance /= transmittance.sum()
+            da_solution    = analyzer.da_solution
+            da_solution   /= da_solution.sum()
+            max_value = max(transmittance.max(), da_solution.max()) * 1.1
+            dpg.set_axis_limits("y_axis_0", 0.0, max_value)
+            dpg.set_value("series_tag_0", [xs, transmittance])
+            dpg.set_value("series_tag_1", [xs, da_solution / da_solution.sum()])
+            analyzer.ray_marched = True
+        if ctrl.calculate_sample:
+            ctrl.calculate_sample = False
+            if analyzer.ray_marched:
+                da_samples, tr_samples = analyzer.inverse_sampling(ctrl.length,
+                                  config_dict["ua"], config_dict["us"])
+                bin_tr, hist_tr = AnalysisTool.get_histograms(tr_samples, config_dict['bin_num'])
+                bin_da, hist_da = AnalysisTool.get_histograms(da_samples, config_dict['bin_num'])
+                dpg.configure_item("series_tag_2", weight = bin_tr[1] - bin_tr[0])
+                dpg.configure_item("series_tag_3", weight = bin_da[1] - bin_da[0])
+                dpg.set_value("series_tag_2", [bin_tr, hist_tr])
+                dpg.set_value("series_tag_3", [bin_da, hist_da])
 
         if mode == "da_only":
             diff_viz.draw_da()
         else:
-            # convert from window coordinates to world coordinates
-            # TODO: refactoring, we can draw circles outside of the kernel function
-            diff_viz.draw_mult(vertex_x, use_tr)
+            diff_viz.draw_mult(ctrl.vertex_x, ctrl.use_tr)
         raw_data = pad_rgba(diff_viz.pixels.to_numpy())
         dpg.configure_item("diffusion", default_value=raw_data)
     dpg.destroy_context()

@@ -49,6 +49,10 @@ def change_text(sender, app_data):
         dpg.stop_dearpygui()
     print(f"Key Button: {app_data}")
 
+def mouse_release_callback(sender, app_data):
+    if app_data == 1:
+        print(app_data, dpg.get_mouse_pos())
+
 if __name__ == "__main__":
     mode = "da_only"
     with dpg.handler_registry():
@@ -70,6 +74,9 @@ if __name__ == "__main__":
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'DA only', tag = 'da_only', width = 100, callback = button_callback)
             dpg.add_button(label = 'DA Tr', tag = 'da_tr', width = 100, callback = button_callback)
+
+    with dpg.handler_registry():
+        dpg.add_mouse_release_handler(callback=mouse_release_callback)
 
     dpg.create_viewport(title='Custom Title', width=800, height=800)
     dpg.setup_dearpygui()

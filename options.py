@@ -51,6 +51,7 @@ def get_options_2d(delayed_parse = False):
                                       default = 1.0, help = "Position of the emitter", type = float)
     parser.add_argument("--max_time", default = 1.5, help = "Maximum t", type = float)
     parser.add_argument("--time",     default = 0.1, help = "Initial time", type = float)
+
     parser.add_argument("--width",    default = 720, help = "Canvas width", type = int)
     parser.add_argument("--height",   default = 720, help = "Canvas height", type = int)
     parser.add_argument("--scale",    default = 300, help = "Canvas initial scaling", type = float)
@@ -58,6 +59,11 @@ def get_options_2d(delayed_parse = False):
     parser.add_argument("--diffuse_mode",    
                                       default = 0, choices=[0, 1], help = "Diffusion function to use, 0 = full, 1 = half", type = int)
     parser.add_argument("--mode",     default = 'da_only', choices=['da_only', 'da_tr'], help = "Visualization mode", type = str)
+
+    parser.add_argument("--rm_num",   default = 256, help = "Ray marching sample num", type = int)
+    parser.add_argument("--samp_num", default = 128, help = "Inverse sampling number", type = int)
+    parser.add_argument("--bin_num",  default = 128, help = "Number of histogram bins", type = int)
+
     if delayed_parse:
         return parser
     return parser.parse_args()

@@ -23,6 +23,12 @@ def tr_ti(x, ua, us):
 
 @ti.func
 def tr_2d(x, y, sx, sy, ua, us):
+    """ Transmittance calculated on a 2D plane
+        x: vertex position axis-x
+        y: vertex position axis-y
+        sx: source (emitter) position axis-x
+        sy: source (emitter) position axis-y
+    """
     dx2 = (x - sx) ** 2
     dy2 = (y - sy) ** 2
     return ti.exp(- (ua + us) * ti.sqrt(dx2 + dy2))
@@ -53,7 +59,7 @@ def half_diffusion_ti(
     u_a: float, D: float, c: float = SOL, sub: int = 0
 ) -> float :
     dt = ti.max(t - tau, 0.)
-    coeff = c * dt / ti.sqrt(4 * tm.pi * c * D * dt)
+    coeff = c / ti.sqrt(4 * tm.pi * c * D * dt)
     if tm.isnan(coeff):         # only when dt = 0, can coeff and result both be NaN
         return 0
     else:
@@ -68,7 +74,7 @@ def full_diffusion_ti(
     u_a: float, D: float, c: float = SOL
 ) -> float :
     dt = np.maximum(t - tau, 0)
-    coeff = c * dt / ti.sqrt(4 * np.pi * c * D * dt)
+    coeff = c / ti.sqrt(4 * np.pi * c * D * dt)
     if tm.isnan(coeff):
         return 0
     return coeff * exp_power_ti(x, t, tau, eps, u_a, D, c)
@@ -83,7 +89,7 @@ def half_diffusion(x, t, tau, eps, u_a, D, c = SOL, sub = False):
         - D: 1 / 3 * (ua + (1 - g) * us)
     """
     dt = np.maximum(t - tau, 0)
-    coeff = c * dt / np.sqrt(4 * np.pi * c * D * dt)
+    coeff = c / np.sqrt(4 * np.pi * c * D * dt)
     result = coeff * exp_power(x, t, tau, eps, u_a, D, c)
     if sub:
         result -= coeff * exp_power(x, t, tau, -eps, u_a, D, c)
@@ -93,7 +99,7 @@ def half_diffusion(x, t, tau, eps, u_a, D, c = SOL, sub = False):
 
 def full_diffusion(x, t, tau, eps, u_a, D, c = SOL):
     dt = np.maximum(t - tau, 0)
-    coeff = c * dt / np.sqrt(4 * np.pi * c * D * dt)
+    coeff = c / np.sqrt(4 * np.pi * c * D * dt)
     result = coeff * exp_power(x, t, tau, eps, u_a, D, c)
     return np.where(np.isnan(result), 0, result)
 
@@ -123,7 +129,7 @@ def full_diffusion_2d(
     if dt <= 0.:
         return 0.
     else:
-        coeff = 1. / (4. * tm.pi * D)
+        coeff = 1. / (4. * tm.pi * D * dt)
         return coeff * exp_power2(x, y, t, tau, eps_x, eps_y, u_a, D, c)
     
 @ti.experimental.real_func
@@ -138,7 +144,7 @@ def half_diffusion_2d(
     else:
         # By default, in half infinite space we will place two point source (dipole)
         # Symmetrically around the half space boundary (x = 0), therefore eps should be negated 
-        coeff = 1. / (4. * tm.pi * D)
+        coeff = 1. / (4. * tm.pi * D * dt)
         return coeff * (exp_power2(x, y, t, tau, eps_x, eps_y, u_a, D, c) + \
                         exp_power2(x, y, t, tau, -eps_x, eps_y, u_a, D, c)
         )
