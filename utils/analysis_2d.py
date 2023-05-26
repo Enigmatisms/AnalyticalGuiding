@@ -86,9 +86,8 @@ class AnalysisTool:
         return peak_point[0], peak_point[1]
     
     @staticmethod
-    def get_histograms(samples: np.ndarray, bin_num: int):
+    def get_histograms(samples: np.ndarray, bin_num: int, max_pos: float):
         """ Get histogram analysis """
-        max_pos = samples.max()
         bins = np.linspace(0, max_pos, bin_num)
         hist, _ = np.histogram(samples, bins)
         return bins[:-1], hist.astype(bins.dtype)

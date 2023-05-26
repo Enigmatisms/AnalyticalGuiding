@@ -33,18 +33,13 @@ def value_sync(set_tag: str):
 
 def create_slider(label: str, tag: str, min_v: float, max_v: float, default: float, in_type: str = "float"):
     """ Create horizontally grouped (and synced) input box and slider """
-    if in_type == "float":
-        with dpg.group(horizontal = True):
-            dpg.add_input_float(tag = f"{tag}_input", default_value = default, 
-                                    width = 110, callback = value_sync(tag))
-            dpg.add_slider_float(label = label, tag = tag, min_value = min_v,
-                        max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
-    else:
-        with dpg.group(horizontal = True):
-            dpg.add_input_int(tag = f"{tag}_input", default_value = default, 
-                                    width = 110, callback = value_sync(tag))
-            dpg.add_slider_int(label = label, tag = tag, min_value = min_v,
-                        max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
+    slider_func = dpg.add_slider_float if in_type == "float" else dpg.add_slider_int
+    input_func  = dpg.add_input_float if in_type == "float" else dpg.add_input_int
+    with dpg.group(horizontal = True):
+        input_func(tag = f"{tag}_input", default_value = default, 
+                                width = 110, callback = value_sync(tag))
+        slider_func(label = label, tag = tag, min_value = min_v,
+                    max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
 
 def value_updator(config_dict: dict, skip_params: set):
     """ Get values from sliders """
@@ -307,8 +302,8 @@ if __name__ == "__main__":
             if analyzer.ray_marched:
                 da_samples, tr_samples = analyzer.inverse_sampling(ctrl.length,
                                   config_dict["ua"], config_dict["us"])
-                bin_tr, hist_tr = AnalysisTool.get_histograms(tr_samples, config_dict['bin_num'])
-                bin_da, hist_da = AnalysisTool.get_histograms(da_samples, config_dict['bin_num'])
+                bin_tr, hist_tr = AnalysisTool.get_histograms(tr_samples, config_dict['bin_num'], ctrl.length)
+                bin_da, hist_da = AnalysisTool.get_histograms(da_samples, config_dict['bin_num'], ctrl.length)
                 dpg.configure_item("series_tag_2", weight = bin_tr[1] - bin_tr[0])
                 dpg.configure_item("series_tag_3", weight = bin_da[1] - bin_da[0])
                 dpg.set_value("series_tag_2", [bin_tr, hist_tr])

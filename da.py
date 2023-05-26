@@ -38,7 +38,7 @@ def get_diffusion_length(u_a, u_s, g = 0):
 
 @ti.func
 def get_diffusion_length_ti(u_a, u_s, g = 0):
-    return 1 / (3 * (u_a + (1 - g) * u_s))
+    return 1. / (3. * (u_a + (1. - g) * u_s))
 
 @ti.func
 def exp_power_ti(x: float, t: float, tau: float, eps: float, u_a: float, D: float, c: float = SOL):
@@ -47,8 +47,7 @@ def exp_power_ti(x: float, t: float, tau: float, eps: float, u_a: float, D: floa
         -((x - eps) ** 2) / (4. * c * D * dt) -  u_a * c * dt
     )
 
-def exp_power(x, t, tau, eps, u_a, D, c = SOL):
-    dt = t - tau
+def exp_power(x, dt, eps, u_a, D, c = SOL):
     return np.exp(
         -((x - eps) ** 2) / (4 * c * D * dt) -  u_a * c * dt
     )
@@ -88,20 +87,24 @@ def half_diffusion(x, t, tau, eps, u_a, D, c = SOL, sub = False):
         - u_a: absorption coefficient
         - D: 1 / 3 * (ua + (1 - g) * us)
     """
-    dt = np.maximum(t - tau, 0)
+    origin_dt = t - tau
+    dt = np.maximum(t - tau, 1e-4)
     coeff = c / np.sqrt(4 * np.pi * c * D * dt)
-    result = coeff * exp_power(x, t, tau, eps, u_a, D, c)
+    coeff = np.where(origin_dt > 0, coeff, 0)
+    result = coeff * exp_power(x, dt, eps, u_a, D, c)
     if sub:
-        result -= coeff * exp_power(x, t, tau, -eps, u_a, D, c)
+        result -= coeff * exp_power(x, dt, -eps, u_a, D, c)
     else:
-        result += coeff * exp_power(x, t, tau, -eps, u_a, D, c)
-    return np.where(np.isnan(result), 0, result)
+        result += coeff * exp_power(x, dt, -eps, u_a, D, c)
+    return np.where(np.isnan(result) | np.isinf(result), 0, result)
 
 def full_diffusion(x, t, tau, eps, u_a, D, c = SOL):
-    dt = np.maximum(t - tau, 0)
+    origin_dt = t - tau
+    dt = np.maximum(t - tau, 1e-4)
     coeff = c / np.sqrt(4 * np.pi * c * D * dt)
-    result = coeff * exp_power(x, t, tau, eps, u_a, D, c)
-    return np.where(np.isnan(result), 0, result)
+    coeff = np.where(origin_dt > 0, coeff, 0)
+    result = coeff * exp_power(x, dt, eps, u_a, D, c)
+    return np.where(np.isnan(result) | np.isinf(result), 0, result)
 
 """
     DA 2D implementation, here I only implement 
