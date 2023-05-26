@@ -10,6 +10,7 @@ class ControlInfo:
         self.dir_selected     = False
         self.use_tr           = True
         self.pos_x = -1
+        """ pos_x and pos_y is in world frame (divided by scale already)"""
         self.pos_y = -1
         self.vertex_x = vertex_x
         self.length           = 0.

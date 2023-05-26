@@ -77,6 +77,15 @@ class AnalysisTool:
         return da_samples, tr_samples
     
     @staticmethod
+    def get_peaks(xs: np.ndarray, ys: np.ndarray, sx: float, sy: float, px: float, py: float):
+        # For most of the cases, there will be only one peak (by default)
+        peaks = ys.argmax()
+        direction = np.float32([px - sx, py - sy])
+        direction /= np.linalg.norm(direction)
+        peak_point = xs[peaks] * direction + np.float32([sx, sy])
+        return peak_point[0], peak_point[1]
+    
+    @staticmethod
     def get_histograms(samples: np.ndarray, bin_num: int):
         """ Get histogram analysis """
         max_pos = samples.max()

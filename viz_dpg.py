@@ -21,13 +21,8 @@ from utils.create_plot import PlotTools
 from utils.ctrl_utils import ControlInfo
 from utils.analysis_2d import AnalysisTool
 
-""" TODO:
-(1) Add analysis code (for sampling in a specific direction)
-    displaying the path length and visualize path
-    Specifically: given a direction and a max length (set by mouse)
-    calculate and sample along the direction, then do the visualization
-"""
-
+SLIDER_WIDTH = 120
+BUTTON_WIDTH = 120
 SKIP_PARAMS = {"width", "height", "diffuse_mode", "mode"}
 
 def value_sync(set_tag: str):
@@ -43,13 +38,13 @@ def create_slider(label: str, tag: str, min_v: float, max_v: float, default: flo
             dpg.add_input_float(tag = f"{tag}_input", default_value = default, 
                                     width = 110, callback = value_sync(tag))
             dpg.add_slider_float(label = label, tag = tag, min_value = min_v,
-                                max_value = max_v, default_value = default, width = 120, callback = value_sync(f"{tag}_input"))
+                        max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
     else:
         with dpg.group(horizontal = True):
             dpg.add_input_int(tag = f"{tag}_input", default_value = default, 
                                     width = 110, callback = value_sync(tag))
             dpg.add_slider_int(label = label, tag = tag, min_value = min_v,
-                                max_value = max_v, default_value = default, width = 120, callback = value_sync(f"{tag}_input"))
+                        max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
 
 def value_updator(config_dict: dict, skip_params: set):
     """ Get values from sliders """
@@ -65,12 +60,12 @@ def radio_callback(sender, app_data):
         mode = "da_only"
         dpg.set_value("v_scale", -1.5)
         dpg.set_value("v_scale_input", -1.5)
-        dpg.configure_item("max_time", label = "Max time")
-        dpg.configure_item("time", label = "Time")
+        dpg.configure_item('max_time', label = "Max time")
+        dpg.configure_item('time', label = "Time")
     else:
         mode = "da_tr"
-        dpg.configure_item("max_time", label = "Target time")
-        dpg.configure_item("time", label = "Sampled time")
+        dpg.configure_item('max_time', label = "Target time")
+        dpg.configure_item('time', label = "Sampled time")
         dpg.set_value("v_scale", 3)
         dpg.set_value("v_scale_input", 3)
 
@@ -92,11 +87,6 @@ def pad_rgba(img: np.ndarray):
     alpha = np.ones((*img.shape[:-1], 1), dtype = img.dtype)
     img = np.concatenate((img, alpha), axis = -1).transpose((1, 0, 2))
     return np.ascontiguousarray(img)
-
-def dist_sample_callback():
-    """ Distance sampling checkbox """
-    val = dpg.get_item_configuration("ring")["show"]
-    dpg.configure_item("ring", show = not val)
 
 def reset_callback():
     """ Reset configurations to the initial state """
@@ -121,14 +111,19 @@ def sampling_callback():
     global ctrl
     ctrl.calculate_sample = ctrl.dir_selected
 
-def analysis_win_callback():
-    val = dpg.get_item_configuration("plots")["show"]
-    dpg.configure_item("plots", show = not val)
+def show_status_callback(tags: list, labels: list = None):
+    def closure(sender):
+        val = dpg.get_item_configuration(tags[0])["show"]       # unified status
+        for tag in tags:
+            dpg.configure_item(tag, show = not val)
+        if labels is not None:      # switch labels
+            dpg.configure_item(sender, label = labels[int(val)])
+    return closure
 
 def mouse_release_callback(sender, app_data):
     global ctrl, config_dict
     if app_data == 1:       # Freeze scale
-        scale = config_dict["scale"]
+        scale = config_dict['scale']
         ctrl.pos_x, ctrl.pos_y = dpg.get_mouse_pos()
         ctrl.pos_x /= scale
         ctrl.pos_y /= scale
@@ -169,6 +164,7 @@ if __name__ == "__main__":
         # Sampling direction
         dpg.draw_line((0, 0), 20, color = (255, 255, 255, 80), tag=f"sample_dir", show = False)
         # Length indicating arrow
+        # dpg.draw_ellipse(, )
         dpg.draw_arrow((opts.v_pos * opts.scale, opts.height - 40), 
                        (opts.emitter_pos * opts.scale, opts.height - 40),
                         tag = "to_emitter", color = (100, 100, 255, 128)
@@ -176,6 +172,9 @@ if __name__ == "__main__":
         # Length annotation
         dpg.draw_text(((opts.v_pos + opts.emitter_pos) * opts.scale * 0.5 - 32, opts.height - 64), 
                       f"L: {abs(opts.emitter_pos - opts.v_pos):.4f}", tag = "to_emitter_str", size = 20)
+        PlotTools.create_ellipse(opts.v_pos * opts.scale, opts.emitter_pos * opts.scale, diff_viz.cy,
+                        opts.max_time * opts.scale)
+        PlotTools.create_peak_plots(opts.v_pos, opts.emitter_pos, diff_viz.cy, opts.scale)
 
     with dpg.handler_registry():
         dpg.add_key_release_handler(callback=esc_callback)
@@ -184,10 +183,10 @@ if __name__ == "__main__":
 
     with dpg.window(label="Control panel", tag = "control"):
         create_slider("Value scale", "v_scale", -3, 10, opts.v_scale)
-        create_slider("Max time", "max_time", 0.5, 10, opts.max_time)
-        create_slider("Time", "time", 0.0, opts.max_time, opts.time)
-        create_slider("Emitter position", "emitter_pos", 0.05, 5.0, opts.emitter_pos)
-        create_slider("Canvas scale", "scale", 10.0, 1000.0, opts.scale)
+        create_slider("Max time", 'max_time', 0.5, 10, opts.max_time)
+        create_slider("Time", 'time', 0.0, opts.max_time, opts.time)
+        create_slider("Emitter position", 'emitter_pos', 0.05, 5.0, opts.emitter_pos)
+        create_slider("Canvas scale", 'scale', 10.0, 1000.0, opts.scale)
         create_slider("Sigma A", "ua", 0.01, 1.0, opts.ua)
         create_slider("Sigma S", "us", 1.0, 200.0, opts.us)
         create_slider("Ray marching", "rm_num", 32, 256, opts.rm_num, "int")
@@ -196,7 +195,7 @@ if __name__ == "__main__":
 
         with dpg.group(horizontal = True):
             dpg.add_checkbox(label = 'Distance sampling', tag = 'dist_sample', 
-                             default_value = True, callback = dist_sample_callback)
+                             default_value = True, callback = show_status_callback(["ring"]))
             dpg.add_checkbox(label = 'Use Tr', tag = 'use_tr', default_value = True)
             dpg.add_checkbox(label = 'Wavefront', tag = 'use_wvf', default_value = True)
         with dpg.group(horizontal = True):
@@ -206,17 +205,25 @@ if __name__ == "__main__":
             dpg.add_radio_button(["remaining", "forward"], horizontal = True, 
                         default_value = "forward", tag = "time_select")
         with dpg.group(horizontal = True):
-            dpg.add_button(label = 'Reset', tag = 'reset', width = 120, callback = reset_callback)
-            dpg.add_button(label = 'Plot show', tag = 'plot_show', width = 120, callback = analysis_win_callback)
+            dpg.add_button(label = 'Reset', tag = 'reset', width = BUTTON_WIDTH, callback = reset_callback)
+            dpg.add_button(label = 'Plot show', tag = 'plot_show', width = BUTTON_WIDTH, 
+                           callback = show_status_callback(["plots"]))
         with dpg.group(horizontal = True):
-            dpg.add_button(label = 'Draw PDF', tag = 'draw_pdf', width = 120, callback = pdf_draw_callback)
-            dpg.add_button(label = 'Draw sample', tag = 'draw_sample', width = 120, callback = sampling_callback)
+            dpg.add_button(label = 'Draw PDF', tag = 'draw_pdf', width = BUTTON_WIDTH, callback = pdf_draw_callback)
+            dpg.add_button(label = 'Draw sample', tag = 'draw_sample', width = BUTTON_WIDTH, 
+                           callback = sampling_callback)
+        with dpg.group(horizontal = True):
+            peak_related_tags = ["peak_line1", "peak_point", "peak_line2", "peak_text1", "peak_text2"]
+            dpg.add_button(label = 'Show Ellipse', tag = 'ellipse', width = BUTTON_WIDTH, 
+                           callback = show_status_callback(["time_ellipse"], ['No ellipse', 'Show ellipse']))
+            dpg.add_button(label = 'Show peaks', tag = 'peak', width = BUTTON_WIDTH, 
+                           callback = show_status_callback(peak_related_tags, ['No peaks', 'Show peaks']))
         if mode == "da_only":
-            dpg.configure_item("max_time", label = "Max time")
-            dpg.configure_item("time", label = "Time")
+            dpg.configure_item('max_time', label = "Max time")
+            dpg.configure_item('time', label = "Time")
         else:
-            dpg.configure_item("max_time", label = "Target time")
-            dpg.configure_item("time", label = "Sampled time")
+            dpg.configure_item('max_time', label = "Target time")
+            dpg.configure_item('time', label = "Sampled time")
 
     with dpg.window(label="2D analytical result plots", tag="plots", show = False, pos = (opts.width + 50, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
@@ -238,9 +245,12 @@ if __name__ == "__main__":
         diff_viz.setter(config_dict)
         analyzer.setter(config_dict)
 
-        emitter_pos = config_dict["emitter_pos"]
-        set_scale = config_dict["scale"]
+        emitter_pos = config_dict['emitter_pos']
+        set_scale   = config_dict['scale']
+        max_time    = config_dict['max_time']
+        cur_time    = config_dict['time']
 
+        PlotTools.toggle_ellipse(ctrl.vertex_x * set_scale, emitter_pos * set_scale, diff_viz.cy, set_scale * max_time)
         dpg.configure_item("emitter", center = (emitter_pos * set_scale, diff_viz.cy))
         dpg.configure_item("vertex", center = (ctrl.vertex_x * set_scale, diff_viz.cy))
         
@@ -252,27 +262,28 @@ if __name__ == "__main__":
                 pos = (text_x_pos, opts.height - 64),
                 text = f"L: {abs(emitter_pos - ctrl.vertex_x):.4f}"
                 )
-        dpg.configure_item("time", max_value = config_dict['max_time'])
+        dpg.configure_item('time', max_value = max_time)
         dpg.configure_item("ring", center = (ctrl.vertex_x * set_scale, diff_viz.cy),
-                radius = set_scale * config_dict["time"])
+                radius = set_scale * cur_time)
         if mode == 'da_only':
             dpg.configure_item("wavefront", center = (emitter_pos * set_scale, diff_viz.cy),
-                    radius = set_scale * config_dict["time"])
+                    radius = set_scale * cur_time)
         else:
             dpg.configure_item("wavefront", center = (emitter_pos * set_scale, diff_viz.cy),
-                    radius = set_scale * (config_dict["max_time"] - config_dict['time']))
+                    radius = set_scale * (max_time - cur_time))
         if ctrl.dir_selected:
             dpg.configure_item("sample_dir", 
                 p1 = (ctrl.vertex_x * set_scale, diff_viz.cy), 
                 p2 = (ctrl.pos_x * set_scale, ctrl.pos_y * set_scale), show = True)
 
         if ctrl.calculate_pdf:
+            # This logic is for button "Draw PDF"
             ctrl.calculate_pdf = False
             
             scale = diff_viz.scale
             eps_y = diff_viz.cy / scale
             target = vec2([ctrl.pos_x, ctrl.pos_y])
-            target_time = -1 if dpg.get_value("time_select") == "forward" else config_dict["max_time"]
+            target_time = -1 if dpg.get_value("time_select") == "forward" else max_time
             ctrl.length = analyzer.ray_marching(ctrl.vertex_x, eps_y, emitter_pos, eps_y, 
                                   config_dict["ua"], config_dict["us"], target, ctrl.use_tr, target_time)
             xs = np.linspace(0, ctrl.length, analyzer.max_ray_march_num + 1)[1:]
@@ -284,8 +295,14 @@ if __name__ == "__main__":
             dpg.set_axis_limits("y_axis_0", 0.0, max_value)
             dpg.set_value("series_tag_0", [xs, transmittance])
             dpg.set_value("series_tag_1", [xs, da_solution / da_solution.sum()])
+
+            peak_x, peak_y = AnalysisTool.get_peaks(xs, da_solution, ctrl.vertex_x,
+                                    diff_viz.cy / set_scale, ctrl.pos_x, ctrl.pos_y)
+            PlotTools.toggle_peak_plots(peak_x, peak_y, ctrl.vertex_x, emitter_pos, diff_viz.cy, set_scale)
+            
             analyzer.ray_marched = True
         if ctrl.calculate_sample:
+            # This logic is for button "Draw samples"
             ctrl.calculate_sample = False
             if analyzer.ray_marched:
                 da_samples, tr_samples = analyzer.inverse_sampling(ctrl.length,
