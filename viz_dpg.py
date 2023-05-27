@@ -237,9 +237,7 @@ if __name__ == "__main__":
         diff_viz.pixels.fill(0)
         ctrl.use_tr      = dpg.get_value("use_tr")
         config_dict = value_updator(config_dict, SKIP_PARAMS)
-        diff_viz.setter(config_dict)
-        analyzer.setter(config_dict)
-
+        
         emitter_pos = config_dict['emitter_pos']
         set_scale   = config_dict['scale']
         max_time    = config_dict['max_time']
@@ -258,6 +256,12 @@ if __name__ == "__main__":
                 text = f"L: {abs(emitter_pos - ctrl.vertex_x):.4f}"
                 )
         dpg.configure_item('time', max_value = max_time)
+        if dpg.get_value('time') > max_time:
+            dpg.set_value('time', max_time - 1e-3)
+            dpg.set_value('time_input', max_time - 1e-3)
+            cur_time = max_time - 1e-3
+            config_dict['time'] = max_time - 1e-3
+        dpg.configure_item('time', max_value = max_time - 1e-3)
         dpg.configure_item("ring", center = (ctrl.vertex_x * set_scale, diff_viz.cy),
                 radius = set_scale * cur_time)
         if mode == 'da_only':
@@ -270,6 +274,9 @@ if __name__ == "__main__":
             dpg.configure_item("sample_dir", 
                 p1 = (ctrl.vertex_x * set_scale, diff_viz.cy), 
                 p2 = (ctrl.pos_x * set_scale, ctrl.pos_y * set_scale), show = True)
+
+        diff_viz.setter(config_dict)
+        analyzer.setter(config_dict)
 
         if ctrl.calculate_pdf:
             # This logic is for button "Draw PDF"

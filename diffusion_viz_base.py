@@ -42,8 +42,7 @@ class DiffusionVizBase:
     
     @us.setter
     def us(self, val):
-        if val < 0.0:
-            raise ValueError("Scattering coefficient should be non-negative")
+        if val < 0.0: return
         self.coeffs[0] = val
         self.coeffs[2] = val + self.coeffs[1]
 
@@ -53,8 +52,7 @@ class DiffusionVizBase:
 
     @ua.setter
     def ua(self, val):
-        if val < 0.0:
-            raise ValueError("Absorption coefficient should be non-negative")
+        if val < 0.0: return
         self.coeffs[1] = val
         self.coeffs[2] = val + self.coeffs[0]
 
@@ -68,8 +66,7 @@ class DiffusionVizBase:
     
     @max_time.setter
     def max_time(self, val):
-        if val <= 0.0:
-            raise ValueError("Max time should be positive")
+        if val <= 0.0: return
         self._max_time[None] = val
 
     @property
@@ -86,8 +83,7 @@ class DiffusionVizBase:
     
     @time.setter
     def time(self, val):
-        if val < 0.0 or val > self.max_time:
-            raise ValueError(f"Time should be in range [0, {self.max_time}]")
+        if val < 0.0 or val > self.max_time: return
         self._time[None] = val
 
     @property
@@ -96,8 +92,7 @@ class DiffusionVizBase:
     
     @scale.setter
     def scale(self, val):
-        if val <= 0.0:
-            raise ValueError("Scale should be positive")
+        if val <= 0.0: return
         self._scale[None] = val
 
     @property
@@ -106,6 +101,5 @@ class DiffusionVizBase:
     
     @v_scale.setter
     def v_scale(self, val):
-        if val <= 0:
-            raise ValueError(f"Inappropriate image scaling value")
+        if val <= 0: return
         self._v_scale[None] = val
