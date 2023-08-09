@@ -12,7 +12,7 @@ from viz_dpg import create_slider, value_updator
 
 def get_ellipse_distance(T: float, d: float, to_f2: np.ndarray, direction: np.ndarray):
     cos = np.dot(to_f2, direction)
-    return 0.5 * (T**2 - d**2) / (T - cos * d)
+    return 0.5 * (T + d) * (T - d) / (T - cos * d)
 
 def mouse_move_callback():
     global configs
@@ -20,8 +20,8 @@ def mouse_move_callback():
         scale = configs['scale']
         pos_x, pos_y = dpg.get_mouse_pos()
 
-        f1_x = configs["half_w"] - configs["scale"] * configs["half_x"]
-        f2_x = configs["half_w"] + configs["scale"] * configs["half_x"]
+        f1_x = configs["half_w"] - scale * configs["half_x"]
+        f2_x = configs["half_w"] + scale * configs["half_x"]
         y_pos = configs["y_pos"]
 
         f1_pos = np.float32([f1_x, y_pos])
@@ -32,7 +32,7 @@ def mouse_move_callback():
         to_f2     /= np.linalg.norm(to_f2)
         direction /= np.linalg.norm(direction)
 
-        distance = get_ellipse_distance(configs["target_time"] * configs["scale"], 2. * configs["half_x"] * configs["scale"], to_f2, direction)
+        distance = get_ellipse_distance(configs["target_time"] * scale, 2. * configs["half_x"] * scale, to_f2, direction)
         oval_pos = f1_pos + direction * distance
         dpg.configure_item("ray1", p1 = f1_pos, p2 = oval_pos)
         dpg.configure_item("ray2", p1 = oval_pos, p2 = f2_pos)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
             
     with dpg.window(label="Control panel", tag = "control"):
         create_slider("target time (2a)", "target_time", 1, 100, configs["target_time"])
-        create_slider("distance (2c)", 'half_x', 0.4, 40, configs["half_x"])
+        create_slider("distance (c)", 'half_x', 0.4, 40, configs["half_x"])
         create_slider("scale", 'scale', 1.0, 10, configs["scale"])
         dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
 
