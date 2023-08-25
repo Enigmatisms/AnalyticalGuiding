@@ -15,6 +15,7 @@ from taichi.math import vec2
 import dearpygui.dearpygui as dpg
 
 from copy import deepcopy
+from typing import Iterable
 from options import get_options_2d
 from diffusion_viz import DiffusionViz
 from utils.create_plot import PlotTools
@@ -31,15 +32,34 @@ def value_sync(set_tag: str):
         dpg.set_value(set_tag, app_data)
     return value_sync_inner
 
-def create_slider(label: str, tag: str, min_v: float, max_v: float, default: float, in_type: str = "float"):
+def callback_wrapper(fixed_callback, callbacks = None):
+    if callbacks is None:
+        return fixed_callback
+    if isinstance(callbacks, Iterable):
+        def callback(_sender, app_data, _user_data):
+            fixed_callback(_sender, app_data, _user_data)
+            for func in callbacks:
+                func()
+    else:
+        def callback(_sender, app_data, _user_data):
+            fixed_callback(_sender, app_data, _user_data)
+            callbacks()
+    return callback
+
+def create_slider(
+    label: str, tag: str, min_v: float, max_v: float, 
+    default: float, in_type: str = "float", other_callback = None
+):
     """ Create horizontally grouped (and synced) input box and slider """
     slider_func = dpg.add_slider_float if in_type == "float" else dpg.add_slider_int
     input_func  = dpg.add_input_float if in_type == "float" else dpg.add_input_int
+    input_callback = callback_wrapper(value_sync(tag), other_callback)
+    slider_callback = callback_wrapper(value_sync(f"{tag}_input"), other_callback)
     with dpg.group(horizontal = True):
         input_func(tag = f"{tag}_input", default_value = default, 
-                                width = 110, callback = value_sync(tag))
+                                width = 110, callback = input_callback)
         slider_func(label = label, tag = tag, min_value = min_v,
-                    max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = value_sync(f"{tag}_input"))
+                    max_value = max_v, default_value = default, width = SLIDER_WIDTH, callback = slider_callback)
 
 def value_updator(config_dict: dict, skip_params: set):
     """ Get values from sliders """

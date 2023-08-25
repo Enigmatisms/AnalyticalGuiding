@@ -7,19 +7,11 @@ import numpy as np
 import dearpygui.dearpygui as dpg
 import matplotlib.pyplot as plt
 
+from functools import partial
 from utils.create_plot import PlotTools
 from viz_dpg import create_slider, value_updator
 
-""" Features to be implemented:
-(1) set initial ray direction with right button
-(2) evaluate HG function product and plot (and also, show the position)
-    - [x] slider for g
-    - [x] Plotter for product curve
-    - [x] Plotter for cosine term curve 
-(3) evaluate the product of two cosine terms
-"""
-
-def esc_callback(sender, app_data):
+def esc_callback(_sender, app_data):
     """ Exit on pressing ESC: ESC in dearpygui is 256 """
     if app_data == 256:          # ESC
         dpg.stop_dearpygui()
@@ -83,7 +75,7 @@ def mouse_release_callback(sender, app_data):
         distance = get_ellipse_distance(configs["target_time"] * scale, 2. * configs["half_x"] * scale, to_f2, direction)
         oval_pos = f1_pos + direction * distance
         dpg.configure_item("origin_dir", p1 = f1_pos, p2 = oval_pos)
-
+        updator_callback()
     
 def phase_hg(cos_theta: float, g: float):
     g2 = g * g
@@ -115,15 +107,16 @@ def updator_callback():
     phase_max = phase_product.max()
     cos_product = cos_1 * cos_2
     cos_product *= phase_max / cos_product.max()
+
+    dpg.set_axis_limits("y_axis_0", 0.0, phase_max * 1.1)
     dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
     dpg.set_axis_limits("y_axis_2", -1.1, 1.1)
     dpg.set_value("series_tag_0", [thetas, phase_product])
-    dpg.set_value("series_tag_1", [thetas, cos_product])
-    dpg.set_value("series_tag_2", [thetas, phase_1])
-    dpg.set_value("series_tag_3", [thetas, phase_2])
-    dpg.set_value("series_tag_4", [thetas, cos_1])
-    dpg.set_value("series_tag_5", [thetas, cos_2])
-    
+    dpg.set_value("series_tag_1", [thetas, phase_1])
+    dpg.set_value("series_tag_2", [thetas, phase_2])
+    dpg.set_value("series_tag_3", [thetas, cos_1])
+    dpg.set_value("series_tag_4", [thetas, cos_2])
+
 def evaluate_phase(ori_angle: float, T: float, d: float, g: float, num_samples: int = 600):
     delta = 2 * np.pi / num_samples
     thetas = np.linspace(-np.pi + delta, np.pi, num_samples)
@@ -180,17 +173,18 @@ if __name__ == "__main__":
                                     configs["target_time"] * configs["scale"])
             
     with dpg.window(label="Control panel", tag = "control"):
-        create_slider("target time (2a)", "target_time", 1, 100, configs["target_time"])
-        create_slider("distance (c)", 'half_x', 0.4, 40, configs["half_x"])
-        create_slider("scale", 'scale', 1.0, 10, configs["scale"])
-        create_slider("g", 'g', -0.999, 0.999, configs["g"])
+        other_callbacks = partial(mouse_release_callback, sender = None, app_data = 1)
+        create_slider("target time (2a)", "target_time", 1, 100, configs["target_time"], other_callback = other_callbacks)
+        create_slider("distance (c)", 'half_x', 0.4, 40, configs["half_x"], other_callback = other_callbacks)
+        create_slider("scale", 'scale', 1.0, 10, configs["scale"], other_callback = other_callbacks)
+        create_slider("g", 'g', -0.999, 0.999, configs["g"], other_callback = other_callbacks)
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
             dpg.add_button(label = 'Update Curve', tag = 'updator', width = 100, callback = updator_callback)
         
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
-        PlotTools.make_plot(540, 250, "Product Curves", ["phase product", "cosine product"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
+        PlotTools.make_plot(540, 250, "Product Curves", ["phase product"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Cos Curves", ["1st cos", "2nd cos"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
 
