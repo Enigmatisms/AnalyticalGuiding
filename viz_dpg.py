@@ -65,8 +65,8 @@ def radio_callback(sender, app_data):
         dpg.set_value("v_scale_input", 3)
 
 def esc_callback(sender, app_data):
-    """ Exit on pressing ESC """
-    if app_data == 27:          # ESC
+    """ Exit on pressing ESC: ESC in dearpygui is 256 """
+    if app_data == 256:          # ESC
         dpg.stop_dearpygui()
 
 def key_callback(sender, app_data):

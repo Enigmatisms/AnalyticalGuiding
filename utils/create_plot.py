@@ -10,13 +10,14 @@ from typing import List, Union
 class PlotTools:
     tag_cnt = 0
     series_cnt = 0
+    cursor_cnt = 0
     series_map = {"bar": dpg.add_bar_series, "line": dpg.add_line_series}
 
     @staticmethod
     def make_plot(
         width:int, height:int, title: str, labels: List[str], 
         val_nums: Union[int, List[int]] = None, all_init_xs: List[np.ndarray] = None,
-        mode: str = "line",
+        mode: str = "line", xy_labels = ['x', 'y'], use_cursor = False
     ):
         if val_nums is None and all_init_xs is None:
             raise ValueError(f"No initialization while trying to create plot labelled '{title}'")
@@ -27,8 +28,8 @@ class PlotTools:
 
             # REQUIRED: create x and y axes
             axis_tag = f"y_axis_{PlotTools.tag_cnt}"
-            dpg.add_plot_axis(dpg.mvXAxis, label="x")
-            dpg.add_plot_axis(dpg.mvYAxis, label="y", tag = axis_tag)
+            dpg.add_plot_axis(dpg.mvXAxis, label=xy_labels[0])
+            dpg.add_plot_axis(dpg.mvYAxis, label=xy_labels[1], tag = axis_tag)
             kwargs = {}
             # series belong to a y axis
             if all_init_xs is None:
@@ -58,6 +59,9 @@ class PlotTools:
                     series_func(init_xs, ys, 
                                 label = label, parent = axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
                     PlotTools.series_cnt += 1
+            if use_cursor:
+                dpg.add_line_series([0, 0], [0, 1], label = "cursor", parent = axis_tag, tag = f"cursor_{PlotTools.cursor_cnt}")
+                PlotTools.cursor_cnt += 1
         PlotTools.tag_cnt += 1
 
     # ====================== Draw time ellipse ======================
