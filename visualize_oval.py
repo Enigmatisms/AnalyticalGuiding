@@ -105,6 +105,8 @@ def updator_callback():
                 configs['target_time'] * scale, f2_x - f1_x, configs['g'])
     phase_product = phase_1 * phase_2
     phase_max = phase_product.max()
+    cdf = np.cumsum(phase_product)
+    cdf *= phase_max / cdf[-1]
     cos_product = cos_1 * cos_2
     cos_product *= phase_max / cos_product.max()
 
@@ -112,10 +114,11 @@ def updator_callback():
     dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
     dpg.set_axis_limits("y_axis_2", -1.1, 1.1)
     dpg.set_value("series_tag_0", [thetas, phase_product])
-    dpg.set_value("series_tag_1", [thetas, phase_1])
-    dpg.set_value("series_tag_2", [thetas, phase_2])
-    dpg.set_value("series_tag_3", [thetas, cos_1])
-    dpg.set_value("series_tag_4", [thetas, cos_2])
+    dpg.set_value("series_tag_1", [thetas, cdf])
+    dpg.set_value("series_tag_2", [thetas, phase_1])
+    dpg.set_value("series_tag_3", [thetas, phase_2])
+    dpg.set_value("series_tag_4", [thetas, cos_1])
+    dpg.set_value("series_tag_5", [thetas, cos_2])
 
 def evaluate_phase(ori_angle: float, T: float, d: float, g: float, num_samples: int = 600):
     delta = 2 * np.pi / num_samples
@@ -177,14 +180,14 @@ if __name__ == "__main__":
         create_slider("target time (2a)", "target_time", 1, 100, configs["target_time"], other_callback = other_callbacks)
         create_slider("distance (c)", 'half_x', 0.4, 40, configs["half_x"], other_callback = other_callbacks)
         create_slider("scale", 'scale', 1.0, 10, configs["scale"], other_callback = other_callbacks)
-        create_slider("g", 'g', -0.999, 0.999, configs["g"], other_callback = other_callbacks)
+        create_slider("g", 'g', -0.999, 0.999, configs["g"], other_callback = updator_callback)
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
             dpg.add_button(label = 'Update Curve', tag = 'updator', width = 100, callback = updator_callback)
         
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
-        PlotTools.make_plot(540, 250, "Product Curves", ["phase product"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
+        PlotTools.make_plot(540, 250, "Product Curves", ["phase product", "CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Cos Curves", ["1st cos", "2nd cos"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
 
