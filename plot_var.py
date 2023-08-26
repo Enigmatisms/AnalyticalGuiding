@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-    origin = np.float32([0.400814, 1.129245, 1.593011, 3.675406, 2.367448, 25.984900])
-    darts = np.float32([0.003807, 0.051048, 0.040090, 0.037951, 0.044579, 0.080963])
+    origin = np.float32([0.789548, 1.649419, 2.122529, 4.945310, 5.064875, 26.616710])
+    darts = np.float32([0.007415, 0.075409, 0.054035, 0.051419, 0.114190, 0.128300])
     origin = np.log1p(origin)
     darts = np.log1p(darts)
     ts = np.linspace(0.1, 0.6, 6)

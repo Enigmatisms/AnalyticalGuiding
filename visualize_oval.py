@@ -11,6 +11,9 @@ from functools import partial
 from utils.create_plot import PlotTools
 from viz_dpg import create_slider, value_updator
 
+""" Non-symmetric problem for this sampling
+"""
+
 def esc_callback(_sender, app_data):
     """ Exit on pressing ESC: ESC in dearpygui is 256 """
     if app_data == 256:          # ESC
@@ -44,6 +47,8 @@ def mouse_move_callback():
         angle = np.arctan2(direction[1], direction[0])
         maxi_1 = max(dpg.get_value("series_tag_0")[1])
         maxi_2 = max([max(dpg.get_value(f"series_tag_{i + 2}")[i]) for i in range(2)])
+        if dpg.get_value('cos_scale'):
+            angle = np.cos(angle)
         dpg.set_value("cursor_0", [[angle, angle], [0, maxi_1]])
         dpg.set_value("cursor_1", [[angle, angle], [0, maxi_2]])
         dpg.set_value("cursor_2", [[angle, angle], [-1, 1]])
@@ -113,6 +118,8 @@ def updator_callback():
     dpg.set_axis_limits("y_axis_0", 0.0, phase_max * 1.1)
     dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
     dpg.set_axis_limits("y_axis_2", -1.1, 1.1)
+    if dpg.get_value('cos_scale'):
+        thetas = np.cos(thetas)
     dpg.set_value("series_tag_0", [thetas, phase_product])
     dpg.set_value("series_tag_1", [thetas, cdf])
     dpg.set_value("series_tag_2", [thetas, phase_1])
@@ -148,7 +155,7 @@ if __name__ == "__main__":
         "ori_angle"   :0,
         "cur_angle"   :0,
     }
-    skip_params = {"y_pos", "half_w", "ori_angle", "cur_angle"}
+    skip_params = {"y_pos", "half_w", "ori_angle", "cur_angle", "cos_scale"}
 
     dpg.create_context()
 
@@ -183,7 +190,8 @@ if __name__ == "__main__":
         create_slider("g", 'g', -0.999, 0.999, configs["g"], other_callback = updator_callback)
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
-            dpg.add_button(label = 'Update Curve', tag = 'updator', width = 100, callback = updator_callback)
+            dpg.add_checkbox(label = 'Cosine Scale', tag = 'cos_scale', 
+                             default_value = False, callback = updator_callback)
         
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
