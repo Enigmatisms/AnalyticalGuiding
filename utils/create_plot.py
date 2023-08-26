@@ -27,9 +27,10 @@ class PlotTools:
             dpg.add_plot_legend()
 
             # REQUIRED: create x and y axes
-            axis_tag = f"y_axis_{PlotTools.tag_cnt}"
-            dpg.add_plot_axis(dpg.mvXAxis, label=xy_labels[0])
-            dpg.add_plot_axis(dpg.mvYAxis, label=xy_labels[1], tag = axis_tag)
+            x_axis_tag = f"x_axis_{PlotTools.tag_cnt}"
+            y_axis_tag = f"y_axis_{PlotTools.tag_cnt}"
+            dpg.add_plot_axis(dpg.mvXAxis, label=xy_labels[0], tag = x_axis_tag)
+            dpg.add_plot_axis(dpg.mvYAxis, label=xy_labels[1], tag = y_axis_tag)
             kwargs = {}
             # series belong to a y axis
             if all_init_xs is None:
@@ -40,7 +41,7 @@ class PlotTools:
                         if mode == "bar":
                             kwargs["weight"] = 1 / val_nums
                         series_func(xs, ys,
-                                label=label, parent = axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
+                                label=label, parent = y_axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
                         PlotTools.series_cnt += 1
                 else:
                     for val_num, label in zip(val_nums, labels):
@@ -49,7 +50,7 @@ class PlotTools:
                         if mode == "bar":
                             kwargs["weight"] = 1 / val_num
                         series_func(xs, ys, 
-                                label=label, parent = axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
+                                label=label, parent = y_axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
                         PlotTools.series_cnt += 1
             else:
                 for init_xs, label in zip(all_init_xs, labels):
@@ -57,10 +58,10 @@ class PlotTools:
                     if mode == "bar":
                         kwargs["weight"] = init_xs[1] - init_xs[0]
                     series_func(init_xs, ys, 
-                                label = label, parent = axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
+                                label = label, parent = y_axis_tag, tag = f"series_tag_{PlotTools.series_cnt}", **kwargs)
                     PlotTools.series_cnt += 1
             if use_cursor:
-                dpg.add_line_series([0, 0], [0, 1], label = "cursor", parent = axis_tag, tag = f"cursor_{PlotTools.cursor_cnt}")
+                dpg.add_line_series([0, 0], [0, 1], label = "cursor", parent = y_axis_tag, tag = f"cursor_{PlotTools.cursor_cnt}")
                 PlotTools.cursor_cnt += 1
         PlotTools.tag_cnt += 1
 

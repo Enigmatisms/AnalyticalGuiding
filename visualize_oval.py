@@ -11,7 +11,12 @@ from functools import partial
 from utils.create_plot import PlotTools
 from viz_dpg import create_slider, value_updator
 
-""" Non-symmetric problem for this sampling
+""" Note 8.26 - 8.27
+- [x] Non-symmetric problem for this sampling
+    This situation will not be present. MIS means that we only need to sample one component
+    So when the second scattering phase sampling is selected, we will only need to sample according to
+    the elliptical cosine term (Schlick approximated)
+- [ ] Try piece-wise linear approximation for elliptical cosine term
 """
 
 def esc_callback(_sender, app_data):
@@ -83,9 +88,15 @@ def mouse_release_callback(sender, app_data):
         updator_callback()
     
 def phase_hg(cos_theta: float, g: float):
+    """ Henyey-Greenstein phase function """
     g2 = g * g
     denom = 1. + g2 - 2. * g * cos_theta
     return (1. - g2) / (np.sqrt(denom) * denom) * 0.25 / np.pi
+
+def phase_schlick(cos_theta, g: float):
+    """ Schlick approximation to HG phase function """
+    k = 1.55 * g - 0.55 * (g ** 3)
+    return 0.25 / np.pi * (1 - k ** 2) / (1 + k * cos_theta) ** 2
 
 def get_two_cosines(ori_angle: float, sample_angle: float, T: float, d: float):
     """ Get the cosine of the first / second scattering term """
@@ -151,7 +162,7 @@ if __name__ == "__main__":
         "half_x"      :20,
         "scale"       :8.0,
         "target_time" :60,
-        "g"           :0,
+        "g"           :-0.5,
         "ori_angle"   :0,
         "cur_angle"   :0,
     }
@@ -188,10 +199,17 @@ if __name__ == "__main__":
         create_slider("distance (c)", 'half_x', 0.4, 40, configs["half_x"], other_callback = other_callbacks)
         create_slider("scale", 'scale', 1.0, 10, configs["scale"], other_callback = other_callbacks)
         create_slider("g", 'g', -0.999, 0.999, configs["g"], other_callback = updator_callback)
+
+        def checker_callback():
+            updator_callback()
+            label = 'cosine value' if dpg.get_value("cos_scale") else 'angle (rad)'
+            for i in range(3):
+                dpg.configure_item(f"x_axis_{i}", label = label)
+
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
             dpg.add_checkbox(label = 'Cosine Scale', tag = 'cos_scale', 
-                             default_value = False, callback = updator_callback)
+                             default_value = False, callback = checker_callback)
         
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
