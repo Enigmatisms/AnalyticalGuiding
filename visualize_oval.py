@@ -163,9 +163,39 @@ def value_save_callback_constructor(mode = 'cos_2'):
         np.float32(data).tofile(f'{mode}.npy')
     return value_save_callback
 
+def change_color_theme():
+    if dpg.get_value('dark_theme'):
+        dpg.bind_theme("default")
+        dpg.configure_item("f1", fill = (255, 255, 255))
+        dpg.configure_item("f2", fill = (255, 255, 255))
+        dpg.configure_item("time_ellipse", color = (0, 255, 0))
+    else:
+        dpg.configure_item("f1", fill = (0, 0, 0))
+        dpg.configure_item("f2", fill = (0, 0, 0))
+        dpg.configure_item("time_ellipse", color = (0, 120, 0))
+        with dpg.theme() as global_theme:
+            with dpg.theme_component(dpg.mvAll):
+                # dpg.show_style_editor()
+                dpg.add_theme_color(dpg.mvThemeCol_Button, (197, 197, 197, 216), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_CheckMark, (0, 131, 220, 216), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBg, (230, 230, 230), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered, (254, 254, 254, 70), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_PopupBg, (247, 247, 247, 128), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_ResizeGrip, (160, 160, 160), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_SliderGrab, (0, 88, 149, 176), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_SliderGrabActive, (4, 4, 4), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Text, (130, 183, 238, 200), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Text, (10, 10, 10), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBg, (170, 208, 255), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBgActive, (0, 129, 218), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (255, 255, 255), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 5, category=dpg.mvTheme)
+        dpg.bind_theme(global_theme)
+
 W = 800
 H = 600
 show_ray = False
+bright_theme = True
 
 if __name__ == "__main__":
     configs = {
@@ -181,6 +211,26 @@ if __name__ == "__main__":
     skip_params = {"y_pos", "half_w", "ori_angle", "cur_angle", "cos_scale"}
 
     dpg.create_context()
+    if bright_theme:
+        with dpg.theme() as global_theme:
+            with dpg.theme_component(dpg.mvAll):
+                # dpg.show_style_editor()
+                dpg.add_theme_color(dpg.mvThemeCol_Button, (197, 197, 197, 216), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_CheckMark, (0, 131, 220, 216), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBg, (230, 230, 230), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_FrameBgHovered, (254, 254, 254, 70), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_PopupBg, (247, 247, 247, 128), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_ResizeGrip, (160, 160, 160), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_SliderGrab, (0, 88, 149, 176), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_SliderGrabActive, (4, 4, 4), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Text, (130, 183, 238, 200), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Text, (10, 10, 10), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBg, (170, 208, 255), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBgActive, (0, 129, 218), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (255, 255, 255), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 5, category=dpg.mvThemeCat_Core)
+            dpg.bind_theme(global_theme)
+            # dpg.bind_theme("default")
 
     with dpg.texture_registry(show=False):
         dpg.add_raw_texture(width=W, height=H, 
@@ -189,21 +239,21 @@ if __name__ == "__main__":
     with dpg.window(label="Ellipse viz", tag = "display", no_bring_to_front_on_focus = True):
         dpg.add_image("ellipse")
         dpg.draw_circle(center = [configs["half_w"] - configs["scale"] * configs["half_x"], configs["y_pos"]], 
-                        radius = 5, fill = (255, 255, 255), tag = "f1", show = True)
+                        radius = 5, fill = (0, 0, 0), tag = "f1", show = True)
         dpg.draw_circle(center = [configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"]], 
-                        radius = 5, fill = (255, 255, 255), tag = "f2", show = True)
+                        radius = 5, fill = (0, 0, 0), tag = "f2", show = True)
         dpg.draw_line(p1 = [configs["half_w"] - configs["scale"] * configs["half_x"], configs["y_pos"]],
                       p2 = [configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"]],
                       color = (255, 0, 0), tag = "ray1", show = show_ray)
         dpg.draw_line(p1 = [configs["half_w"] - configs["scale"] * configs["half_x"], configs["y_pos"]],
                       p2 = [configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"]],
-                      color = (0, 255, 0), tag = "origin_dir", show = False)
+                      color = (0, 128, 255), tag = "origin_dir", show = False)
         dpg.draw_line(p1 = [configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"]],
                       p2 = [configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"]],
                       color = (255, 0, 0), tag = "ray2", show = show_ray)
         PlotTools.create_ellipse(configs["half_w"] - configs["scale"] * configs["half_x"], 
                                     configs["half_w"] + configs["scale"] * configs["half_x"], configs["y_pos"],
-                                    configs["target_time"] * configs["scale"])
+                                    configs["target_time"] * configs["scale"], color = (0, 120, 0, 100))
             
     with dpg.window(label="Control panel", tag = "control"):
         other_callbacks = partial(mouse_release_callback, sender = None, app_data = 1)
@@ -222,6 +272,8 @@ if __name__ == "__main__":
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
             dpg.add_checkbox(label = 'Cosine Scale', tag = 'cos_scale', 
                              default_value = False, callback = checker_callback)
+            dpg.add_checkbox(label = 'Dark theme', tag = 'dark_theme', 
+                             default_value = False, callback = change_color_theme)
         with dpg.group(horizontal = True):
             dpg.add_button(label = 'Save cosine', tag = 'save_cos', width = 100, callback = value_save_callback_constructor('cos_2'))
             dpg.add_button(label = 'Save product', tag = 'save_pro', width = 100, callback = value_save_callback_constructor('product'))

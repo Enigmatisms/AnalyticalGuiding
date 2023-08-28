@@ -22,7 +22,7 @@ class PlotTools:
         if val_nums is None and all_init_xs is None:
             raise ValueError(f"No initialization while trying to create plot labelled '{title}'")
         series_func = PlotTools.series_map[mode]
-        with dpg.plot(label = title, height = height, width = width):
+        with dpg.plot(label = title, height = height, width = width, anti_aliased = True):
             # optionally create legend
             dpg.add_plot_legend()
 
@@ -81,12 +81,12 @@ class PlotTools:
         return pmin, pmax
 
     @staticmethod
-    def create_ellipse(f1_x: float, f2_x: float, y_pos: float, a2: float, tag = "time_ellipse"):
+    def create_ellipse(f1_x: float, f2_x: float, y_pos: float, a2: float, color = (0, 255, 0, 100), tag = "time_ellipse"):
         """ Create dearpygui ellipse item 
             Note that inputs are scaled (to window coordinates)
         """
         pmin, pmax = PlotTools.get_ellipse(f1_x, f2_x, y_pos, a2)
-        dpg.draw_ellipse(pmin, pmax, tag = tag, color = (0, 255, 0, 100), show = False)
+        dpg.draw_ellipse(pmin, pmax, tag = tag, color = color, show = False, thickness = 2, segments = 128)
 
     @staticmethod
     def toggle_ellipse(f1_x: float, f2_x: float, y_pos: float, a2: float, tag = "time_ellipse"):
