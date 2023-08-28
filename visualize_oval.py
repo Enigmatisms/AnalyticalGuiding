@@ -155,6 +155,14 @@ def dummy_input():
     ys = np.arctan(xs) / np.pi * 2
     return xs, ys
 
+def value_save_callback_constructor(mode = 'cos_2'):
+    def value_save_callback():
+        local_mapping = {'cos_2':5, 'product':0}
+        tag_idx = local_mapping.get(mode, 3)
+        data = dpg.get_value(f'series_tag_{tag_idx}')
+        np.float32(data).tofile(f'{mode}.npy')
+    return value_save_callback
+
 W = 800
 H = 600
 show_ray = False
@@ -214,6 +222,10 @@ if __name__ == "__main__":
             dpg.add_button(label = 'Show Ray', tag = 'show_ray', width = 100, callback = show_ray_callback)
             dpg.add_checkbox(label = 'Cosine Scale', tag = 'cos_scale', 
                              default_value = False, callback = checker_callback)
+        with dpg.group(horizontal = True):
+            dpg.add_button(label = 'Save cosine', tag = 'save_cos', width = 100, callback = value_save_callback_constructor('cos_2'))
+            dpg.add_button(label = 'Save product', tag = 'save_pro', width = 100, callback = value_save_callback_constructor('product'))
+            dpg.add_button(label = 'Save phase 2', tag = 'save_ph', width = 100, callback = value_save_callback_constructor('phase2'))
         
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
