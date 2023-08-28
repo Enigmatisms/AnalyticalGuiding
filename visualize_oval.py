@@ -123,6 +123,8 @@ def updator_callback():
     phase_max = phase_product.max()
     cdf = np.cumsum(phase_product)
     cdf *= phase_max / cdf[-1]
+    cdf_2nd = np.cumsum(phase_2)
+    cdf_2nd *= phase_2.max() / cdf_2nd[-1]
     cos_product = cos_1 * cos_2
     cos_product *= phase_max / cos_product.max()
 
@@ -135,8 +137,10 @@ def updator_callback():
     dpg.set_value("series_tag_1", [thetas, cdf])
     dpg.set_value("series_tag_2", [thetas, phase_1])
     dpg.set_value("series_tag_3", [thetas, phase_2])
-    dpg.set_value("series_tag_4", [thetas, cos_1])
-    dpg.set_value("series_tag_5", [thetas, cos_2])
+    dpg.set_value("series_tag_4", [thetas, cdf_2nd])
+    
+    dpg.set_value("series_tag_5", [thetas, cos_1])
+    dpg.set_value("series_tag_6", [thetas, cos_2])
 
 def evaluate_phase(ori_angle: float, T: float, d: float, g: float, num_samples: int = 600):
     delta = 2 * np.pi / num_samples
@@ -214,7 +218,7 @@ if __name__ == "__main__":
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
         PlotTools.make_plot(540, 250, "Product Curves", ["phase product", "CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
-        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
+        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter", "2nd CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Cos Curves", ["1st cos", "2nd cos"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
 
     with dpg.handler_registry():
