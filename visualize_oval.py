@@ -129,11 +129,11 @@ def updator_callback():
     cos_product *= phase_max / cos_product.max()
 
     dpg.set_axis_limits("y_axis_0", 0.0, phase_max * 1.1)
-    # dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
+    dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
     dpg.set_axis_limits("y_axis_2", -1.1, 1.1)
 
     app_thetas, app_cos, app_pdf, app_cdf = piece_wise_linear(configs['target_time'] * scale, f2_x - f1_x, configs['g'])
-    # app_pdf *= phase_2.max() / app_pdf.max()
+    app_cdf *= phase_2.max() / app_cdf[-1]
     if dpg.get_value('cos_scale'):
         thetas = np.cos(thetas)
         app_thetas = app_cos
@@ -143,7 +143,7 @@ def updator_callback():
     dpg.set_value("series_tag_2", [thetas, phase_1])
     dpg.set_value("series_tag_3", [thetas, phase_2])
     dpg.set_value("series_tag_4", [thetas, cdf_2nd])
-    dpg.set_value("series_tag_5", [app_thetas, app_pdf])
+    dpg.set_value("series_tag_5", [app_thetas, app_cdf])
     
     dpg.set_value("series_tag_6", [thetas, cos_1])
     dpg.set_value("series_tag_7", [thetas, cos_2])
@@ -163,15 +163,17 @@ def piece_wise_linear(T: float, d: float, g: float, num_samples: int = 600):
     cosine_samples = np.cos(thetas)
 
     a = d / T
-    k1 = (2 * (a * a) - 1) / (a + 1)
-    k2 = (1 - 2 * (a * a)) / (1 - a)
-    pdf_1 = phase_hg(k1* (cosine_samples + 1), g)
-    pdf_2 = phase_hg(k2 * (cosine_samples - 1), g)
+    k1 = 2 * (a * a) / (a + 1)
+    k2 = -2 * (a * a) / (1 - a)
+    lin_cos_1 = k1* (cosine_samples + 1) - 1
+    lin_cos_2 = k2 * (cosine_samples - 1) - 1
+    pdf_1 = phase_hg(lin_cos_1, g)
+    pdf_2 = phase_hg(lin_cos_2, g)
     app_pdf = np.zeros_like(thetas)
     less = cosine_samples < a
 
-    app_pdf[less]  = (k1* (cosine_samples + 1))[less]
-    app_pdf[~less] = (k2 * (cosine_samples - 1))[~less]
+    app_pdf[less]  = pdf_1[less]
+    app_pdf[~less] = pdf_2[~less]
     app_cdf = np.cumsum(app_pdf)
     return thetas, cosine_samples, app_pdf, app_cdf
 
