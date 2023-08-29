@@ -1,16 +1,25 @@
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
-    origin = np.float32([0.523907, 3.909169, 2.090282, 9.757042, 9.484419, 18.283212])
-    darts = np.float32([0.006528, 0.057450, 0.055036, 0.058269, 0.139562, 0.162919])
-    origin = np.log1p(origin)
-    darts = np.log1p(darts)
+    origin = np.float32([0.0013011316, 0.0051353928, 0.0013929765, 0.0034081743, 0.0029452041, 0.0367359391])
+    darts = np.float32([0.0000319566, 0.0000340005, 0.0000291367, 0.0000249658, 0.0000246023, 0.0000210247])
+    origin = -np.log(origin)
+    darts = -np.log(darts)
     ts = np.linspace(0.1, 0.6, 6)
-    plt.scatter(ts, origin, color = 'red', s = 5)
-    plt.scatter(ts, darts, color = 'blue', s = 5)
-    plt.plot(ts, origin, color = 'red', label = 'variance for original method')
-    plt.plot(ts, darts, color = 'blue', label = 'variance for DARTS')
+    
+    origin_df = pd.DataFrame.from_dict({'t':ts, 'val':origin})
+    darts_df = pd.DataFrame.from_dict({'t':ts, 'val':darts})
+    
+    sns.scatterplot(data = origin_df, x = 't', y = 'val', s = 15)
+    sns.scatterplot(data = darts_df, x = 't', y = 'val', s = 15)
+    
+    sns.lineplot(data = origin_df, x = 't', y = 'val', label = 'variance for original method')
+    sns.lineplot(data = darts_df, x = 't', y = 'val', label = 'variance for DARTS')
+    # plt.plot(ts, origin, color = 'red', label = 'variance for original method')
+    # plt.plot(ts, darts, color = 'blue', label = 'variance for DARTS')
     plt.legend()
     plt.grid(axis = 'both')
     plt.xlabel('scattering coefficient')
