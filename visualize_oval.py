@@ -129,18 +129,24 @@ def updator_callback():
     cos_product *= phase_max / cos_product.max()
 
     dpg.set_axis_limits("y_axis_0", 0.0, phase_max * 1.1)
-    dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
+    # dpg.set_axis_limits("y_axis_1", 0.0, max(phase_1.max(), phase_2.max()) * 1.1)
     dpg.set_axis_limits("y_axis_2", -1.1, 1.1)
+
+    app_thetas, app_cos, app_pdf, app_cdf = piece_wise_linear(configs['target_time'] * scale, f2_x - f1_x, configs['g'])
+    # app_pdf *= phase_2.max() / app_pdf.max()
     if dpg.get_value('cos_scale'):
         thetas = np.cos(thetas)
+        app_thetas = app_cos
     dpg.set_value("series_tag_0", [thetas, phase_product])
     dpg.set_value("series_tag_1", [thetas, cdf])
+
     dpg.set_value("series_tag_2", [thetas, phase_1])
     dpg.set_value("series_tag_3", [thetas, phase_2])
     dpg.set_value("series_tag_4", [thetas, cdf_2nd])
+    dpg.set_value("series_tag_5", [app_thetas, app_pdf])
     
-    dpg.set_value("series_tag_5", [thetas, cos_1])
-    dpg.set_value("series_tag_6", [thetas, cos_2])
+    dpg.set_value("series_tag_6", [thetas, cos_1])
+    dpg.set_value("series_tag_7", [thetas, cos_2])
 
 def evaluate_phase(ori_angle: float, T: float, d: float, g: float, num_samples: int = 600):
     delta = 2 * np.pi / num_samples
@@ -149,7 +155,26 @@ def evaluate_phase(ori_angle: float, T: float, d: float, g: float, num_samples: 
     phase_1 = phase_hg(cos_1, g)
     phase_2 = phase_hg(cos_2, g)
     return thetas, cos_1, cos_2, phase_1, phase_2
-    
+
+def piece_wise_linear(T: float, d: float, g: float, num_samples: int = 600):
+    """ Piecewise linear approximation to cosine, calculate the resulting CDF """
+    delta = 2 * np.pi / num_samples
+    thetas = np.linspace(-np.pi + delta, np.pi, num_samples)
+    cosine_samples = np.cos(thetas)
+
+    a = d / T
+    k1 = (2 * (a * a) - 1) / (a + 1)
+    k2 = (1 - 2 * (a * a)) / (1 - a)
+    pdf_1 = phase_hg(k1* (cosine_samples + 1), g)
+    pdf_2 = phase_hg(k2 * (cosine_samples - 1), g)
+    app_pdf = np.zeros_like(thetas)
+    less = cosine_samples < a
+
+    app_pdf[less]  = (k1* (cosine_samples + 1))[less]
+    app_pdf[~less] = (k2 * (cosine_samples - 1))[~less]
+    app_cdf = np.cumsum(app_pdf)
+    return thetas, cosine_samples, app_pdf, app_cdf
+
 def dummy_input():
     xs = np.linspace(-10, 10, 600)
     ys = np.arctan(xs) / np.pi * 2
@@ -282,7 +307,8 @@ if __name__ == "__main__":
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
         PlotTools.make_plot(540, 250, "Product Curves", ["phase product", "CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
-        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter", "2nd CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
+        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter", "2nd CDF", "approximate CDF"], 
+                            600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Cos Curves", ["1st cos", "2nd cos"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
 
     with dpg.handler_registry():
