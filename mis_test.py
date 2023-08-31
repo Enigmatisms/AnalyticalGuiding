@@ -61,7 +61,7 @@ def mc_local_sampling(g: float, T: float, input_dir: Arr, target_pos: Arr, num_s
     new_dir  = target_pos - ell_pos
     new_dir /= np.linalg.norm(new_dir, axis = -1, keepdims = True)      # normalization
     cos_theta = (ray_dir * new_dir).sum(axis = -1)
-    all_phase = phase_hg(g, cos_theta)
+    all_phase = phase_hg(g, cos_theta) / (2. * np.pi)
     to_emitter = T - ray_lens
     to_emitter *= to_emitter
     samples = all_phase / to_emitter            # phase function / d^2
@@ -90,7 +90,6 @@ def mis_ellipse_sampling(
     ell_local_rayd = np.stack([np.cos(phi) * sin_theta, ell_1st_cos, np.sin(phi) * sin_theta], axis = -1)
     ell_rayd = delocalize_rotate(np.float32([1, 0, 0]), ell_local_rayd)
     cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
-    # TODO: the 2 pi problem is not solved
     pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
     # then we need to calculate the PDF of using EPS to sample the original samples - `pdf_ori2ell`
     cos_x_ori = ori_1st_rayd[:, 0]
@@ -98,15 +97,20 @@ def mis_ellipse_sampling(
     # ok we have almost everything we need, we should further (1) get 1 / d^2, (2) the first sampling and PDF does not cancel out
     d_emitter = T - ellipse_t(T, d, ell_rayd[:, 0])
     d_emitter *= d_emitter
+    ell_results = pdf_ell2ori * ell_results / d_emitter
     
     # now it is time to calculate MIS!
     mis_ori_samples = ori_results / (eta * pdf_ell2ori + (1 - eta) * ori_pdf)
+    mis_ell_samples = ell_results / (eta * ell_pdf + (1 - eta) * pdf_ori2ell)
 
-    pass
+    return np.concatenate([mis_ori_samples, mis_ell_samples])
 
 if __name__ == "__main__":
     T = 4
     d = 1
+    g = -0.5
+    alphas = 1.0
     target_pos = np.float32([d, 0, 0])
-    
-
+    input_dir = np.float32([-1, 0, 1])
+    input_dir /= np.linalg.norm(input_dir)
+    # do the sampling here
