@@ -9,7 +9,8 @@ def curve_calc(ts: np.ndarray, T, d, cos_t):
 def curve_calc_T(Ts: np.ndarray, d, cos_t):
     return 2 * ((Ts - d * cos_t) ** 2) / (Ts ** 2 - 2 * Ts * d * cos_t + d**2)
 
-def ellipse_t(T, d, cos_t):
+def ellipse_t(T, d, cos_t) -> np.ndarray:
+    """ Calculate 1D ellipse-ray intersection """
     return (T * T - d * d) / (T - d * cos_t) * 0.5
 
 def get_ts(d, T, num_samples = 2000):

@@ -31,7 +31,10 @@ def get_c2_z(g: float, k1: float, k2: float, cos_v: float):
     return c2, z
 
 def phase_hg(g: float, samples: np.ndarray):
-    """ Evaluate Henyey-Greenstein phase function """
+    """ Evaluate Henyey-Greenstein phase function 
+        Note that this function is not for spherical sampling but 2D ellipse sampling
+        therefore the value for PDF should be divided by 2pi
+    """
     return (1 - g ** 2) / 2 / (1 + g ** 2 - 2 * g * samples) ** (3/2)
 
 def get_k(d, T, is_first = True):
@@ -60,9 +63,19 @@ def eval_second_scat(g: float, d: float, T: float, cos_samples: np.float32):
     cos_2 = (x_scatter - d * cos_samples) / (x_scatter - T)
     return phase_hg(g, cos_2)
 
-def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000):
+def eps_pdf(g: float, d: float, T: float, samples: float):
+    """ input samples are cosine theta to the x-axis """
+    k1 = get_k(d, T)
+    k2 = get_k(d, T, False)
+    r = d / T
+    values = np.zeros_like(samples, dtype = np.float32)
+    part_1_flag = samples < r
+    values[part_1_flag]  = phase_hg(g, d, T, k1 * (samples[part_1_flag] + 1) - 1)
+    values[~part_1_flag] = phase_hg(g, d, T, k2 * (samples[~part_1_flag] - 1) - 1)
+    return values / (2. * np.pi)
+
+def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000, sample_only = False):
     """ Inverse CDF sampling for the proposed direction sampling """
-    NUM_BINS = 200
     rd_samples = np.random.rand(num_samples)
     k1 = get_k(d, T)
     k2 = get_k(d, T, False)
@@ -73,7 +86,16 @@ def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000):
     part_1_samps = inverse_map1(g, k1, Z = z, samples = rd_samples[is_part_1])
     part_2_samps = inverse_map2(g, k2, Z = z, C2 = c2, samples = rd_samples[~is_part_1])
     samples = np.concatenate([part_1_samps, part_2_samps])
+    if sample_only:
+        # we should return sampling PDF and the evaluation result
+        part1_eval = eval_second_scat(g, d, T, part_1_samps)
+        part2_eval = eval_second_scat(g, d, T, part_2_samps)
+        
+        part1_pdf = phase_hg(g, d, T, k1 * (part_1_samps + 1) - 1)
+        part2_pdf = phase_hg(g, d, T, k2 * (part_2_samps - 1) - 1)
+        return np.concatenate([part1_eval, part2_eval]), samples, np.concatenate([part1_pdf, part2_pdf])
     
+    NUM_BINS = 200
     cos_thetas = np.linspace(-1 + 1e-5, 1, 2000)
     origin_phase2 = eval_second_scat(g, d, T, cos_thetas)
     hist, _ = np.histogram(samples, range = (-1.0, 1.0), bins = NUM_BINS)
@@ -127,12 +149,46 @@ def visualize_curves(g = -0.5, d = 3, T = 6, num_samples = 1000, show_quadrature
     plt.legend()
     plt.grid(axis = 'both')
     plt.show()
+    
+def simulate_conversion(fix_angle, num_samples = 4000000, uniform_cosine = True):
+    """ I am bother by this problem, and this is the last god damn step! 
+        The purpose: try to uniformly sample the cos-alpha (related to x-axis)
+        and calculate the cosine values related to a specific angle
+    """
+    BIN_NUMS = 1000
+    if uniform_cosine:
+        cos_values = np.random.rand(num_samples) * 2. - 1.
+        sign_samples = np.random.rand(num_samples)
+        angles = np.arccos(cos_values)
+        angles[sign_samples < 0.5] *= -1
+    else:
+        angles = np.linspace(-np.pi + 1e-5, np.pi - 1e-5, num_samples)
+    delta_angle = (fix_angle - angles) % (2. * np.pi) - np.pi
+    new_cos = np.cos(delta_angle)
+    plt.subplot(2, 1, 1)
+    sns.histplot(new_cos, binrange = (-1.0, 1.0), bins = BIN_NUMS, alpha = 0.4, 
+                 log_scale = (False, False), kde = False, label = 'Our sampling method', 
+                 element = 'poly', line_kws={'label': "KDE fit", 'linestyle': '--'})
+    plt.legend()
+    plt.grid(axis = 'both')
+    plt.subplot(2, 1, 2)
+    alphas_1 = np.linspace(-np.pi + fix_angle + 0.03, fix_angle - 0.03, 2000)
+    
+    # note that alphas_2 is in reverse order
+    alphas_2 = np.linspace(fix_angle + np.pi - 0.03, fix_angle + 0.03, 2000)
+    xs_1 = np.cos(alphas_1 - fix_angle)
+    plt.plot(xs_1, np.abs(np.sin(alphas_1) / np.sin(alphas_1 - fix_angle)) + np.abs(np.sin(alphas_2) / np.sin(alphas_2 - fix_angle)), c = 'r')
+    plt.grid(axis = 'both')
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     import matplotlib
     matplotlib.use('TKAgg')
-    d = 3
-    T = 6
-    g = 0.2
-    # visualize_curves(g, d, T)
-    inverse_cdf_sample(g, d, T)
+    # d = 3
+    # T = 6
+    # g = 0.2
+    # # visualize_curves(g, d, T)
+    # inverse_cdf_sample(g, d, T)
+    fixed = 45 / 180 * np.pi
+    simulate_conversion(fixed, uniform_cosine = False)
