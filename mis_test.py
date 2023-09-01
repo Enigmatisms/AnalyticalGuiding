@@ -94,7 +94,7 @@ def conversion(cos_x: Arr, cos_between: Arr) -> Arr:
 
 def mis_ellipse_sampling(
     g: float, T: float, d: float, input_dir: Arr, target_pos: Arr, 
-    alpha:float, R: Arr, num_samples = 100000, verbose = True):
+    alpha:float, R_mc: Arr, R_mis: Arr, num_samples = 100000, verbose = True):
     """ MIS EPS method """
     # inverse_cdf_sample
     eta = get_ellipse_proba(g, d, T, alpha)
@@ -105,13 +105,13 @@ def mis_ellipse_sampling(
     if verbose:
         print(f"Ellipse proba: {eta:.3f}. Actual ellipse samples: {ell_sample_cnt / num_samples * 100:.3f} %.")
     
-    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R, ori_sample_cnt, mis = True)
+    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R_mc, ori_sample_cnt, mis = True)
     ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample(g, d, T, ell_sample_cnt, True)
     # first, convert the ellipse 1st cosine term to ray direction, remember this cosine is related to the target direction
     phi = 2. * np.pi * np.random.rand(ell_results.shape[0]).astype(np.float32)
     sin_theta = np.sqrt(np.maximum(0., 1. - ell_1st_cos * ell_1st_cos))
     ell_local_rayd = np.stack([np.cos(phi) * sin_theta, ell_1st_cos, np.sin(phi) * sin_theta], axis = -1)
-    ell_rayd = delocalize_rotate(ell_local_rayd, R)
+    ell_rayd = delocalize_rotate(ell_local_rayd, R_mis)
     cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
     # open3d_plot(ell_rayd, target_pos, input_dir)
     pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
@@ -147,7 +147,8 @@ def single_test(
     print(f"Monte Carlo sampling finished after: {time.time() - start_t:.4f} s")
     
     start_t = time.time()
-    mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, n_samples)
+    R_mis = np_rotation_between(np.float32([0, 1, 0]), np.float32([1, 0, 0]))
+    mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mc, R_mis, n_samples)
     print(f"MIS EPS sampling finished after: {time.time() - start_t:.4f} s")
     print(f"MC estimate: {mc_estimate:.7f}. MIS EPS: {mis_estimate:.7f}")
     
@@ -164,7 +165,7 @@ def variance_test(
     for _ in tqdm.tqdm(range(num_iter)):
         samples, _, _ = mc_local_sampling(g, T, target_pos, R_mc, n_samples)
         mc_estimate = samples.mean()
-        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mis, n_samples, verbose = False)
+        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mc, R_mis, n_samples, verbose = False)
         mc_samples.append(mc_estimate)
         mis_samples.append(mis_estimate)
         
@@ -182,13 +183,15 @@ def variance_test(
 if __name__ == "__main__":
     import matplotlib
     matplotlib.use('TKAgg')
-    NUM_ITER = 4000
+    NUM_ITER = 50
     N_SAMPLES = 1000000
-    T = 1.5
+    T = 2
     d = 1
     g = -0.7
     alphas = 0.5
     input_dir = np.float32([-1, 0, 1])
     input_dir /= np.linalg.norm(input_dir)
     
-    variance_test(g, T, d, alphas, input_dir, N_SAMPLES, NUM_ITER)
+    # variance_test(g, T, d, alphas, input_dir, N_SAMPLES, NUM_ITER)
+    single_test(g, T, d, alphas, input_dir, N_SAMPLES)
+    

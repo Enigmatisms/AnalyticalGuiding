@@ -86,7 +86,7 @@ def get_ellipse_proba(g: float, d: float, T: float, alpha : float):
 
 def mis_ellipse_sampling(
     g: float, T: float, d: float, input_dir: Arr, target_pos: Arr, 
-    alpha:float, R: Arr, num_samples = 100000, verbose = True):
+    alpha:float, R_mc: Arr, R_mis: Arr, num_samples = 100000, verbose = True):
     """ MIS EPS method """
     # inverse_cdf_sample
     eta = get_ellipse_proba(g, d, T, alpha)
@@ -97,13 +97,13 @@ def mis_ellipse_sampling(
     if verbose:
         print(f"Ellipse proba: {eta:.3f}. Actual ellipse samples: {ell_sample_cnt / num_samples * 100:.3f} %.")
     
-    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R, ori_sample_cnt, mis = True)
+    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R_mc, ori_sample_cnt, mis = True)
     ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample_cu(g, d, T, ell_sample_cnt, True)
     # first, convert the ellipse 1st cosine term to ray direction, remember this cosine is related to the target direction
     phi = 2. * np.pi * torch.rand(ell_sample_cnt, dtype = torch.float32).cuda()
     sin_theta = torch.sqrt((1. - ell_1st_cos * ell_1st_cos).clamp(0, 1))
     ell_local_rayd = torch.stack([torch.cos(phi) * sin_theta, ell_1st_cos, torch.sin(phi) * sin_theta], dim = -1)
-    ell_rayd = delocalize_rotate(ell_local_rayd, R)
+    ell_rayd = delocalize_rotate(ell_local_rayd, R_mis)
     cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
     # open3d_plot(ell_rayd, target_pos, input_dir)
     pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
@@ -140,7 +140,7 @@ def variance_test(
     for _ in tqdm.tqdm(range(num_iter)):
         samples, _, _ = mc_local_sampling(g, T, target_pos, R_mc, n_samples)
         mc_estimate = samples.mean().item()
-        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mis, n_samples, verbose = False)
+        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mc, R_mis, n_samples, verbose = False)
         mc_samples.append(mc_estimate)
         mis_samples.append(mis_estimate)
         
