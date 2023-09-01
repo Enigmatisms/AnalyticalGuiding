@@ -67,12 +67,13 @@ def eps_pdf(g: float, d: float, T: float, samples: float):
     """ input samples are cosine theta to the x-axis """
     k1 = get_k(d, T)
     k2 = get_k(d, T, False)
-    r = d / T
+    cos_dT = d / T
+    _, z = get_c2_z(g, k1, k2, cos_dT)
     values = np.zeros_like(samples, dtype = np.float32)
-    part_1_flag = samples < r
-    values[part_1_flag]  = phase_hg(g, d, T, k1 * (samples[part_1_flag] + 1) - 1)
-    values[~part_1_flag] = phase_hg(g, d, T, k2 * (samples[~part_1_flag] - 1) - 1)
-    return values / (2. * np.pi)
+    part_1_flag = samples < cos_dT
+    values[part_1_flag]  = phase_hg(g, k1 * (samples[part_1_flag] + 1) - 1)
+    values[~part_1_flag] = phase_hg(g, k2 * (samples[~part_1_flag] - 1) - 1)
+    return values / (2. * np.pi * z)
 
 def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000, sample_only = False):
     """ Inverse CDF sampling for the proposed direction sampling """
@@ -88,11 +89,11 @@ def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000, samp
     samples = np.concatenate([part_1_samps, part_2_samps])
     if sample_only:
         # we should return sampling PDF and the evaluation result
-        part1_eval = eval_second_scat(g, d, T, part_1_samps)
-        part2_eval = eval_second_scat(g, d, T, part_2_samps)
+        part1_eval = eval_second_scat(g, d, T, part_1_samps) / (2. * np.pi)
+        part2_eval = eval_second_scat(g, d, T, part_2_samps) / (2. * np.pi)
         
-        part1_pdf = phase_hg(g, d, T, k1 * (part_1_samps + 1) - 1)
-        part2_pdf = phase_hg(g, d, T, k2 * (part_2_samps - 1) - 1)
+        part1_pdf = phase_hg(g, k1 * (part_1_samps + 1) - 1) / (2. * np.pi) / z
+        part2_pdf = phase_hg(g, k2 * (part_2_samps - 1) - 1) / (2. * np.pi) / z
         return np.concatenate([part1_eval, part2_eval]), samples, np.concatenate([part1_pdf, part2_pdf])
     
     NUM_BINS = 200
@@ -185,10 +186,10 @@ def simulate_conversion(fix_angle, num_samples = 4000000, uniform_cosine = True)
 if __name__ == "__main__":
     import matplotlib
     matplotlib.use('TKAgg')
-    # d = 3
-    # T = 6
-    # g = 0.2
+    d = 1
+    T = 4
+    g = -0.6
     # # visualize_curves(g, d, T)
-    # inverse_cdf_sample(g, d, T)
-    fixed = 45 / 180 * np.pi
-    simulate_conversion(fixed, uniform_cosine = False)
+    inverse_cdf_sample(g, d, T)
+    # fixed = 45 / 180 * np.pi
+    # simulate_conversion(fixed, uniform_cosine = False)

@@ -4,15 +4,19 @@
     if we set T and g, we can have a scattering ellipse to integrate
 """
 
+import time
 import numpy as np
+import seaborn as sns
 import matplotlib.pyplot as plt
 
 from numpy import ndarray as Arr
 from scipy.spatial.transform import Rotation as Rot
 
 from curve_viz import ellipse_t
+from open3d_utils import open3d_plot
 from elliptical_phase import phase_hg, inverse_cdf_sample, eps_pdf
 
+""" - [ ] Extensive logic check is ongoing """
 def np_rotation_between(fixd: Arr, target: Arr) -> Arr:
     """
         Transform parsed from xml file is merely camera orientation (numpy CPU version)
@@ -32,20 +36,22 @@ def np_rotation_between(fixd: Arr, target: Arr) -> Arr:
     
 def delocalize_rotate(anchor: Arr, local_dir: Arr):
     R = np_rotation_between(np.float32([0, 1, 0]), anchor)
+    if local_dir.ndim == 2:
+        return (R @ local_dir[..., None]).squeeze()
     return R @ local_dir
 
 def sample_hg(g: float, num_samples = 100000):
     """ H-G sphere sampling: returns sampled direction and cos_theta """
     cos_theta = 0.
     g2 = g * g
-    sqr_term = (1. - g2) / (1. + g - 2. * g * np.random.rand(num_samples, dtype = np.float32))
+    sqr_term = (1. - g2) / (1. + g - 2. * g * np.random.rand(num_samples).astype(np.float32))
     cos_theta = (1. + g2 - sqr_term * sqr_term) / (2. * g)
     sin_theta = np.sqrt(np.maximum(0., 1. - cos_theta * cos_theta))
-    phi = 2. * np.pi * np.random.rand(num_samples, dtype = np.float32)
+    phi = 2. * np.pi * np.random.rand(num_samples).astype(np.float32)
     # rotational offset w.r.t axis [0, 1, 0] & pdf
     return np.stack([np.cos(phi) * sin_theta, cos_theta, np.sin(phi) * sin_theta], axis = -1), cos_theta
 
-def mc_local_sampling(g: float, T: float, input_dir: Arr, target_pos: Arr, num_samples = 100000):
+def mc_local_sampling(g: float, T: float, input_dir: Arr, target_pos: Arr, num_samples = 100000, mis = False):
     """ Monte Carlo local sampling method
         The final output will be integrated value and histogram
     """
@@ -55,16 +61,20 @@ def mc_local_sampling(g: float, T: float, input_dir: Arr, target_pos: Arr, num_s
     # but we still need it for MIS purpose
     pdf = phase_hg(g, cos_theta) / (2. * np.pi)
     ray_dir = delocalize_rotate(input_dir, local_ray_dir)
+    ray_dir /= np.linalg.norm(ray_dir, axis = -1, keepdims = True)
     # Do not use cos_theta here, the above cosine theta is defined against input_dir not x-axis. Use ray_dir instead
     ray_lens = ellipse_t(T, d, ray_dir[:, 0])
-    ell_pos  = ray_lens * ray_dir
-    new_dir  = target_pos - ell_pos
+    ell_pos  = ray_lens[..., None] * ray_dir
+    new_dir  = -ell_pos + target_pos
+    # open3d_plot(ell_pos, target_pos, input_dir)
     new_dir /= np.linalg.norm(new_dir, axis = -1, keepdims = True)      # normalization
     cos_theta = (ray_dir * new_dir).sum(axis = -1)
     all_phase = phase_hg(g, cos_theta) / (2. * np.pi)
-    to_emitter = T - ray_lens
-    to_emitter *= to_emitter
-    samples = all_phase / to_emitter            # phase function / d^2
+    # to_emitter = T - ray_lens
+    # to_emitter *= to_emitter
+    samples = all_phase # / to_emitter            # phase function / d^2
+    if mis:
+        samples *= pdf
     return samples, ray_dir, pdf
 
 def get_ellipse_proba(g: float, d: float, T: float, alpha : float):
@@ -72,45 +82,108 @@ def get_ellipse_proba(g: float, d: float, T: float, alpha : float):
     abs_g = abs(g)
     return abs_g / (abs_g + r * alpha)
 
+def conversion(cos_x: Arr, cos_between: Arr) -> Arr:
+    """ Measure conversion """
+    denom = np.sqrt(1 - cos_between * cos_between)
+    denom = np.maximum(1e-5, denom)
+    nom   = np.sqrt(1 - cos_x * cos_x)
+    nom   = np.maximum(1e-5, nom)
+    return nom / denom
+
 def mis_ellipse_sampling(
     g: float, T: float, d: float, input_dir: Arr, 
-    target_pos: Arr, alpha = 0.5, num_samples = 100000):
+    target_pos: Arr, alpha = 0.5, num_samples = 100000, verbose = True):
     """ MIS EPS method """
     # inverse_cdf_sample
     eta = get_ellipse_proba(g, d, T, alpha)
     mis_samples = np.random.rand(num_samples)
-    ell_sample_cnt = (mis_samples > eta).sum()
+    ell_sample_cnt = (mis_samples < eta).sum()
     ori_sample_cnt = num_samples - ell_sample_cnt
     
-    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, input_dir, target_pos, ori_sample_cnt)
+    if verbose:
+        print(f"Ellipse proba: {eta:.3f}. Actual ellipse samples: {ell_sample_cnt / num_samples * 100:.3f} %.")
+    
+    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, input_dir, target_pos, ori_sample_cnt, mis = True)
     ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample(g, d, T, ell_sample_cnt, True)
     # first, convert the ellipse 1st cosine term to ray direction, remember this cosine is related to the target direction
-    phi = 2. * np.pi * np.random.rand(num_samples, dtype = np.float32)
+    phi = 2. * np.pi * np.random.rand(ell_results.shape[0]).astype(np.float32)
     sin_theta = np.sqrt(np.maximum(0., 1. - ell_1st_cos * ell_1st_cos))
     ell_local_rayd = np.stack([np.cos(phi) * sin_theta, ell_1st_cos, np.sin(phi) * sin_theta], axis = -1)
     ell_rayd = delocalize_rotate(np.float32([1, 0, 0]), ell_local_rayd)
     cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
+    # open3d_plot(ell_rayd, target_pos, input_dir)
     pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
     # then we need to calculate the PDF of using EPS to sample the original samples - `pdf_ori2ell`
     cos_x_ori = ori_1st_rayd[:, 0]
     pdf_ori2ell = eps_pdf(g, d, T, cos_x_ori)
     # ok we have almost everything we need, we should further (1) get 1 / d^2, (2) the first sampling and PDF does not cancel out
-    d_emitter = T - ellipse_t(T, d, ell_rayd[:, 0])
-    d_emitter *= d_emitter
-    ell_results = pdf_ell2ori * ell_results / d_emitter
+    # d_emitter = T - ellipse_t(T, d, ell_rayd[:, 0])
+    # d_emitter *= d_emitter
+    
+    ell_results *= pdf_ell2ori # / d_emitter
     
     # now it is time to calculate MIS!
-    mis_ori_samples = ori_results / (eta * pdf_ell2ori + (1 - eta) * ori_pdf)
-    mis_ell_samples = ell_results / (eta * ell_pdf + (1 - eta) * pdf_ori2ell)
+    # ori_samples: how we evaluate the PDF of original samples as if it is sampled by EPS
+    mis_ori_samples = ori_results / (eta * pdf_ori2ell + (1 - eta) * ori_pdf)
+    mis_ell_samples = ell_results / (eta * ell_pdf + (1 - eta) * pdf_ell2ori)
+    
+    all_samples = np.concatenate([mis_ori_samples, mis_ell_samples])
 
-    return np.concatenate([mis_ori_samples, mis_ell_samples])
+    return all_samples.mean()
+
+def single_test(
+    g: float, T: float, d: float, alphas: float, 
+    input_dir: Arr, n_samples: int = 400000
+):
+    target_pos = np.float32([d, 0, 0])
+    # do the sampling here
+    
+    start_t = time.time()
+    samples, _, _ = mc_local_sampling(g, T, input_dir, target_pos, n_samples)
+    mc_estimate = samples.mean()
+    print(f"Monte Carlo sampling finished after: {time.time() - start_t:.4f} s")
+    
+    start_t = time.time()
+    mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, n_samples)
+    print(f"MIS EPS sampling finished after: {time.time() - start_t:.4f} s")
+    print(f"MC estimate: {mc_estimate:.7f}. MIS EPS: {mis_estimate:.7f}")
+    
+def variance_test(
+    g: float, T: float, d: float, alphas: float, 
+    input_dir: Arr, n_samples: int = 400000, num_iter: int = 4000
+):
+    import tqdm
+    mc_samples = []
+    mis_samples = []
+    target_pos = np.float32([d, 0, 0])
+    for _ in tqdm.tqdm(range(num_iter)):
+        samples, _, _ = mc_local_sampling(g, T, input_dir, target_pos, n_samples)
+        mc_estimate = samples.mean()
+        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, n_samples, verbose = False)
+        mc_samples.append(mc_estimate)
+        mis_samples.append(mis_estimate)
+        
+    mc_samples = np.float32(mc_samples)
+    mis_samples = np.float32(mis_samples)
+    mc_samples.tofile("mc_samples.npy")
+    mis_samples.tofile("mis_samples.npy")
+    
+    all_mean = np.mean(np.concatenate([mc_samples, mis_samples]))
+    var_mc = (mc_samples - all_mean).var()
+    var_mis = (mis_samples - all_mean).var()
+    print(f"Finished, the estimation is {all_mean:.5f}. Var ratio: MIS / MC = {var_mis / var_mc:.4f}")
+    
 
 if __name__ == "__main__":
-    T = 4
+    import matplotlib
+    matplotlib.use('TKAgg')
+    NUM_ITER = 4000
+    N_SAMPLES = 1000000
+    T = 2
     d = 1
-    g = -0.5
-    alphas = 1.0
-    target_pos = np.float32([d, 0, 0])
+    g = -0.7
+    alphas = 0.5
     input_dir = np.float32([-1, 0, 1])
     input_dir /= np.linalg.norm(input_dir)
-    # do the sampling here
+    
+    variance_test(g, T, d, alphas, input_dir, N_SAMPLES, NUM_ITER)
