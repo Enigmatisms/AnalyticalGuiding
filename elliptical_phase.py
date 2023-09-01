@@ -1,12 +1,11 @@
 """ Visualize oval visualizer output
 """
 
+import torch
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-
-from visualize_oval import evaluate_phase
 
 def cdf_1(g: float, k1: float, samples: np.ndarray):
     """ Evaluate the first part, without normalization"""
@@ -14,6 +13,19 @@ def cdf_1(g: float, k1: float, samples: np.ndarray):
     first_term = (1 - g ** 2) / a / np.sqrt(1 + g ** 2 - 2 * g * (-1 + k1 + k1 * samples))
     second_term = (1 - g) / a
     return first_term - second_term
+
+def cdf_1_cu(g: float, k1: float, samples: np.ndarray):
+    """ Evaluate the first part, without normalization"""
+    a = 2 * g * k1
+    first_term = (1 - g ** 2) / a / torch.sqrt(1 + g ** 2 - 2 * g * (-1 + k1 + k1 * samples))
+    second_term = (1 - g) / a
+    return first_term - second_term
+
+def cdf_2_raw_cu(g: float, k2: float, samples: np.ndarray):
+    """ Evaluate the second part, without normalization and integral debias hence 'raw'"""
+    a = 2 * g * k2
+    first_term = (1 - g ** 2) / a / torch.sqrt(1 + g ** 2 + 2 * g * (1 + k2 - k2 * samples))
+    return first_term
 
 def cdf_2_raw(g: float, k2: float, samples: np.ndarray):
     """ Evaluate the second part, without normalization and integral debias hence 'raw'"""
@@ -63,17 +75,41 @@ def eval_second_scat(g: float, d: float, T: float, cos_samples: np.float32):
     cos_2 = (x_scatter - d * cos_samples) / (x_scatter - T)
     return phase_hg(g, cos_2)
 
-def eps_pdf(g: float, d: float, T: float, samples: float):
+def eps_pdf(g: float, d: float, T: float, samples: float, cuda = False):
     """ input samples are cosine theta to the x-axis """
     k1 = get_k(d, T)
     k2 = get_k(d, T, False)
     cos_dT = d / T
     _, z = get_c2_z(g, k1, k2, cos_dT)
-    values = np.zeros_like(samples, dtype = np.float32)
+    if cuda:
+        values = torch.zeros_like(samples, dtype = torch.float32).cuda()
+    else:
+        values = np.zeros_like(samples, dtype = np.float32)
     part_1_flag = samples < cos_dT
     values[part_1_flag]  = phase_hg(g, k1 * (samples[part_1_flag] + 1) - 1)
     values[~part_1_flag] = phase_hg(g, k2 * (samples[~part_1_flag] - 1) - 1)
     return values / (2. * np.pi * z)
+
+def inverse_cdf_sample_cu(g: float, d: float, T: float, num_samples = 1000000, sample_only = False):
+    """ Inverse CDF sampling for the proposed direction sampling """
+    rd_samples = torch.rand(num_samples).cuda()
+    k1 = get_k(d, T)
+    k2 = get_k(d, T, False)
+    cos_dT = d / T
+    c2, z = get_c2_z(g, k1, k2, cos_dT)
+    p1 = cdf_1(g, k1, cos_dT) / z
+    is_part_1 = rd_samples < p1
+    part_1_samps = inverse_map1(g, k1, Z = z, samples = rd_samples[is_part_1])
+    part_2_samps = inverse_map2(g, k2, Z = z, C2 = c2, samples = rd_samples[~is_part_1])
+    samples = torch.cat([part_1_samps, part_2_samps])
+    if sample_only:
+        # we should return sampling PDF and the evaluation result
+        part1_eval = eval_second_scat(g, d, T, part_1_samps) / (2. * np.pi)
+        part2_eval = eval_second_scat(g, d, T, part_2_samps) / (2. * np.pi)
+        
+        part1_pdf = phase_hg(g, k1 * (part_1_samps + 1) - 1) / (2. * np.pi) / z
+        part2_pdf = phase_hg(g, k2 * (part_2_samps - 1) - 1) / (2. * np.pi) / z
+        return torch.cat([part1_eval, part2_eval]), samples, torch.cat([part1_pdf, part2_pdf])
 
 def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000, sample_only = False):
     """ Inverse CDF sampling for the proposed direction sampling """
