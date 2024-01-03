@@ -309,7 +309,7 @@ if __name__ == "__main__":
     with dpg.window(label="2D analytical result plots", tag="plots", show = True, pos = (W + 25, 0),
                     no_bring_to_front_on_focus = True, no_focus_on_appearing = True):
         PlotTools.make_plot(540, 250, "Product Curves", ["phase product", "CDF"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
-        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter", "2nd CDF", "approximate CDF"], 
+        PlotTools.make_plot(540, 250, "Phase Curves", ["1st scatter", "2nd scatter", "2nd CDF", "approximated CDF"], 
                             600, xy_labels = ['angle', 'value'], use_cursor = True)
         PlotTools.make_plot(540, 250, "Cos Curves", ["1st cos", "2nd cos"], 600, xy_labels = ['angle', 'value'], use_cursor = True)
 
