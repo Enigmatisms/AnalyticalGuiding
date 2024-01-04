@@ -46,7 +46,7 @@ def draw_sample(ax, shift, color):
     vertices = np.array([[-0.04, 0], [0, 0.2], [0.04, 0]])
     vertices[:, 0] += shift
     face = Polygon(vertices, closed=True, facecolor = color, alpha = 0.9)
-    edge = Polygon(vertices, closed=True, edgecolor = 'black', fill = False, alpha = 0.9)
+    edge = Polygon(vertices, closed=True, edgecolor = 'grey', fill = False, alpha = 0.9)
     ax.add_patch(face)
     ax.add_patch(edge)
 
@@ -57,7 +57,7 @@ if __name__ == "__main__":
     up_limits     = [8, 7, 5] 
     shifts        = [1, 2, 4]
     scale_factors = [2, 1.5, 1]  # Different peak heights
-    sample_position = [0.7, 3.5, 6]
+    sample_position = [0.7, 2.2, 5.2]
 
     sns.set_style('whitegrid')
     
@@ -69,10 +69,10 @@ if __name__ == "__main__":
     plt.rc('axes', labelsize=15)  
     plt.rc('xtick', labelsize=14) 
     plt.rc('ytick', labelsize=14) 
-    plt.rc('legend', fontsize=13) 
+    plt.rc('legend', fontsize=15) 
     plt.rc('figure', titlesize=12)
     
-    fig, ax = plt.subplots(figsize = (8, 4))
+    fig, ax = plt.subplots(figsize = (8, 5.5))
     fig.subplots_adjust(left = 0.04, right = 0.96, top = 0.96, bottom = 0.04)
     
     for i in range(1, 6):
@@ -95,15 +95,15 @@ if __name__ == "__main__":
     for i, (up_lim, scale, shift) in enumerate(zip(up_limits, scale_factors, shifts)):
         x = np.linspace(0, up_lim, 2000)
         values = get_rayleigh(x, scale)
-        line, = ax.plot(x + shift, values * y_scale, label='Radiance distribution of $T_{res' + f'{i+1}' + '}$', color = colors[i + 1], linestyle = 'solid', linewidth = 0.7)
-        ax.plot(np.full(2, shift), (0, 1), color = (colors[i + 1]), linestyle = '--', linewidth = 0.7, alpha = 0.7)
+        line, = ax.plot(x + shift, values * y_scale, label='Radiance distribution of $T_{res' + f'{i+1}' + '}$', color = colors[i + 1], linestyle = 'solid', linewidth = 1.5)
+        ax.plot(np.full(2, shift), (0, 1), color = (colors[i + 1]), linestyle = '--', linewidth = 1.5, alpha = 0.7)
         draw_sample(ax, sample_position[i], colors[i + 1])
 
         plots.append(line) 
         handler_map[line] = HandlerRectangle(colors[i + 1], 0.2)
     # Customize the plot
     ax.set_xlim([0, 9.21])
-    ax.set_ylim([-0.05, 1.11])
+    ax.set_ylim([-0.05, 1.17])
     
     ax.annotate("", xy=(9.2, 0), xytext=(-0.03, 0),
              arrowprops=dict(arrowstyle='->,head_length=0.5,head_width=0.2', color='black', fc='black'))
@@ -118,4 +118,4 @@ if __name__ == "__main__":
     ax.grid(axis = 'x')
 
     # Show the plot
-    plt.savefig('samples.png', dpi = 400)
+    plt.savefig('samples.png', dpi = 320)
