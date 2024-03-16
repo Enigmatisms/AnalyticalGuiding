@@ -71,6 +71,7 @@ def inverse_map2(g: float, k2: float, Z: float, C2: float, samples: np.ndarray):
     return nominator / (2 * g * k2)
 
 def eval_second_scat(g: float, d: float, T: float, cos_samples: np.float32):
+    """ Evaluate the second scattering (at elliptical vertex) """
     x_scatter =  0.5 * (T + d) * (T - d) / (T - cos_samples * d)
     cos_2 = (x_scatter - d * cos_samples) / (x_scatter - T)
     return phase_hg(g, cos_2)
@@ -102,7 +103,7 @@ def inverse_cdf_sample_cu(g: float, d: float, T: float, num_samples = 1000000, s
     part_1_samps = inverse_map1(g, k1, Z = z, samples = rd_samples[is_part_1])
     part_2_samps = inverse_map2(g, k2, Z = z, C2 = c2, samples = rd_samples[~is_part_1])
     samples = torch.cat([part_1_samps, part_2_samps])
-    if sample_only:
+    if not sample_only:
         # we should return sampling PDF and the evaluation result
         part1_eval = eval_second_scat(g, d, T, part_1_samps) / (2. * np.pi)
         part2_eval = eval_second_scat(g, d, T, part_2_samps) / (2. * np.pi)
@@ -110,6 +111,7 @@ def inverse_cdf_sample_cu(g: float, d: float, T: float, num_samples = 1000000, s
         part1_pdf = phase_hg(g, k1 * (part_1_samps + 1) - 1) / (2. * np.pi) / z
         part2_pdf = phase_hg(g, k2 * (part_2_samps - 1) - 1) / (2. * np.pi) / z
         return torch.cat([part1_eval, part2_eval]), samples, torch.cat([part1_pdf, part2_pdf])
+    return samples
 
 def inverse_cdf_sample(g: float, d: float, T: float, num_samples = 1000000, sample_only = False):
     """ Inverse CDF sampling for the proposed direction sampling """

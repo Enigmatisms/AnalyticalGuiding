@@ -86,42 +86,57 @@ def get_ellipse_proba(g: float, d: float, T: float, alpha : float):
 
 def mis_ellipse_sampling(
     g: float, T: float, d: float, input_dir: Arr, target_pos: Arr, 
-    alpha:float, R_mc: Arr, R_mis: Arr, num_samples = 100000, verbose = True):
+    R_mc: Arr, R_mis: Arr, eta = 1., num_samples = 100000, verbose = True):
     """ MIS EPS method """
     # inverse_cdf_sample
-    eta = get_ellipse_proba(g, d, T, alpha)
-    mis_samples = torch.rand(num_samples, dtype = torch.float32).cuda()
-    ell_sample_cnt = (mis_samples < eta).sum()
-    ori_sample_cnt = num_samples - ell_sample_cnt
     
-    if verbose:
-        print(f"Ellipse proba: {eta:.3f}. Actual ellipse samples: {ell_sample_cnt / num_samples * 100:.3f} %.")
-    
-    ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R_mc, ori_sample_cnt, mis = True)
-    ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample_cu(g, d, T, ell_sample_cnt, True)
-    # first, convert the ellipse 1st cosine term to ray direction, remember this cosine is related to the target direction
-    phi = 2. * np.pi * torch.rand(ell_sample_cnt, dtype = torch.float32).cuda()
-    sin_theta = torch.sqrt((1. - ell_1st_cos * ell_1st_cos).clamp(0, 1))
-    ell_local_rayd = torch.stack([torch.cos(phi) * sin_theta, ell_1st_cos, torch.sin(phi) * sin_theta], dim = -1)
-    ell_rayd = delocalize_rotate(ell_local_rayd, R_mis)
-    cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
-    # open3d_plot(ell_rayd, target_pos, input_dir)
-    pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
-    # then we need to calculate the PDF of using EPS to sample the original samples - `pdf_ori2ell`
-    cos_x_ori = ori_1st_rayd[:, 0]
-    pdf_ori2ell = eps_pdf(g, d, T, cos_x_ori, cuda = True)
-    # ok we have almost everything we need, we should further (1) get 1 / d^2, (2) the first sampling and PDF does not cancel out
-    # d_emitter = T - ellipse_t(T, d, ell_rayd[:, 0])
-    # d_emitter *= d_emitter
-    
-    ell_results *= pdf_ell2ori # / d_emitter
-    
-    # now it is time to calculate MIS!
-    # ori_samples: how we evaluate the PDF of original samples as if it is sampled by EPS
-    mis_ori_samples = ori_results / (eta * pdf_ori2ell + (1 - eta) * ori_pdf)
-    mis_ell_samples = ell_results / (eta * ell_pdf + (1 - eta) * pdf_ell2ori)
-    
-    all_samples = torch.cat([mis_ori_samples, mis_ell_samples])
+    if eta > 1 - 1e-5:          # no MIS
+        mis_samples = torch.rand(num_samples, dtype = torch.float32).cuda()
+        ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample_cu(g, d, T, num_samples, False)
+        
+        phi = 2. * np.pi * torch.rand(num_samples, dtype = torch.float32).cuda()
+        sin_theta = torch.sqrt((1. - ell_1st_cos * ell_1st_cos).clamp(0, 1))
+        ell_local_rayd = torch.stack([torch.cos(phi) * sin_theta, ell_1st_cos, torch.sin(phi) * sin_theta], dim = -1)
+        ell_rayd = delocalize_rotate(ell_local_rayd, R_mis)
+        cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
+        # open3d_plot(ell_rayd, target_pos, input_dir)
+        phase_1 = phase_hg(g, cos_input_dir) / (2. * np.pi)
+        
+        all_samples = ell_results * phase_1 / ell_pdf
+    else:
+        mis_samples = torch.rand(num_samples, dtype = torch.float32).cuda()
+        ell_sample_cnt = (mis_samples < eta).sum()
+        ori_sample_cnt = num_samples - ell_sample_cnt
+
+        if verbose:
+            print(f"Ellipse proba: {eta:.3f}. Actual ellipse samples: {ell_sample_cnt / num_samples * 100:.3f} %.")
+
+        ori_results, ori_1st_rayd, ori_pdf = mc_local_sampling(g, T, target_pos, R_mc, ori_sample_cnt, mis = True)
+        ell_results, ell_1st_cos, ell_pdf = inverse_cdf_sample_cu(g, d, T, ell_sample_cnt, False)
+        # first, convert the ellipse 1st cosine term to ray direction, remember this cosine is related to the target direction
+
+        phi = 2. * np.pi * torch.rand(ell_sample_cnt, dtype = torch.float32).cuda()
+        sin_theta = torch.sqrt((1. - ell_1st_cos * ell_1st_cos).clamp(0, 1))
+        ell_local_rayd = torch.stack([torch.cos(phi) * sin_theta, ell_1st_cos, torch.sin(phi) * sin_theta], dim = -1)
+        ell_rayd = delocalize_rotate(ell_local_rayd, R_mis)
+        cos_input_dir = (ell_rayd * input_dir).sum(axis = -1)
+        # open3d_plot(ell_rayd, target_pos, input_dir)
+        pdf_ell2ori = phase_hg(g, cos_input_dir) / (2. * np.pi)
+        # then we need to calculate the PDF of using EPS to sample the original samples - `pdf_ori2ell`
+        cos_x_ori = ori_1st_rayd[:, 0]
+        pdf_ori2ell = eps_pdf(g, d, T, cos_x_ori, cuda = True)
+        # ok we have almost everything we need, we should further (1) get 1 / d^2, (2) the first sampling and PDF does not cancel out
+        # d_emitter = T - ellipse_t(T, d, ell_rayd[:, 0])
+        # d_emitter *= d_emitter
+
+        ell_results *= pdf_ell2ori # / d_emitter
+
+        # now it is time to calculate MIS!
+        # ori_samples: how we evaluate the PDF of original samples as if it is sampled by EPS
+        mis_ori_samples = ori_results / (eta * pdf_ori2ell + (1 - eta) * ori_pdf)
+        mis_ell_samples = ell_results / (eta * ell_pdf + (1 - eta) * pdf_ell2ori)
+
+        all_samples = torch.cat([mis_ori_samples, mis_ell_samples])
 
     return all_samples.mean().item()
     
@@ -133,14 +148,27 @@ def variance_test(
     mc_samples = []
     mis_samples = []
     target_pos = np.float32([d, 0, 0])
-    R_mc  = rotation_between(np.float32([0, 1, 0]), input_dir)
+    R_mc  = rotation_between(np.float32([0, 1, 0]), input_dir)      # 0,1,0 to 0,0,1
+    # Why calculating R matrix from 0,1,0 to 1,0,0
     R_mis = rotation_between(np.float32([0, 1, 0]), np.float32([1, 0, 0]))
     input_dir  = torch.from_numpy(input_dir).cuda()
     target_pos = torch.from_numpy(target_pos).cuda()
+    proba = get_ellipse_proba(g, d, T, alphas)
+    use_mis = proba < 1 - 1e-5
+    print(f"Probability for using EPS: {proba:.4f}. MIS = {use_mis}")
+    mc_local_time = 0
+    mis_ells_time = 0
     for _ in tqdm.tqdm(range(num_iter)):
+        
+        start_t = time.time()
         samples, _, _ = mc_local_sampling(g, T, target_pos, R_mc, n_samples)
         mc_estimate = samples.mean().item()
-        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, alphas, R_mc, R_mis, n_samples, verbose = False)
+        mc_local_time += time.time() - start_t
+        
+        start_t = time.time()
+        mis_estimate = mis_ellipse_sampling(g, T, d, input_dir, target_pos, R_mc, R_mis, proba, n_samples, verbose = False)
+        mis_ells_time += time.time() - start_t
+
         mc_samples.append(mc_estimate)
         mis_samples.append(mis_estimate)
         
@@ -153,16 +181,19 @@ def variance_test(
     var_mc = (mc_samples - all_mean).var()
     var_mis = (mis_samples - all_mean).var()
     print(f"Finished, the estimation is {all_mean:.5f}. Var ratio: MIS / MC = {var_mis / var_mc:.4f}")
+    print(f"MC estimation var: {var_mc} / MIS estimation var: {var_mis}")
+    print(f"MC estimation :{mc_samples.mean():.5f} / MIS estimation: {mis_samples.mean():.5f}")
+    print(f"Respective time consumption: MC: {mc_local_time / num_iter * 1e3:.3f}ms. ELL: {mis_ells_time / num_iter * 1e3:.3f}ms")
     
 
 if __name__ == "__main__":
-    NUM_ITER = 4000
-    N_SAMPLES = 1000000
+    NUM_ITER = 20
+    N_SAMPLES = 10000000
     T = 1.5
     d = 1
-    g = -0.7
+    g = -0.9
     alphas = 0.5
-    input_dir = np.float32([-1, 0, 1])
+    input_dir = np.float32([-1, 0.2, 0])
     input_dir /= np.linalg.norm(input_dir)
     
     variance_test(g, T, d, alphas, input_dir, N_SAMPLES, NUM_ITER)
