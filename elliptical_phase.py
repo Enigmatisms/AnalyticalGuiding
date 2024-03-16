@@ -221,13 +221,28 @@ def simulate_conversion(fix_angle, num_samples = 4000000, uniform_cosine = True)
     plt.legend()
     plt.show()
 
+def show_path_reuse_samples(T, D, num_samples = 2000):
+    rd_samples = np.random.rand(num_samples)
+    alpha = 0.25 * (T**2 - D**2) / D
+    T_div_D = T / D
+    d_sample = 1 / (2 / (T - D) - rd_samples / alpha)
+    cos_sample = T_div_D - 2 * alpha / (T - d_sample)
+    ellipse_dist_func = lambda T, D, cos_v: 0.5 * (T + D) * (T - D) / (T - cos_v * D)
+    ts = ellipse_dist_func(T, D, cos_sample)
+    sign = np.sign(np.random.rand(num_samples) - 0.5)
+    dirs = np.stack([cos_sample, sign * np.sqrt(np.maximum(0, 1 - cos_sample ** 2))], axis = -1)
+    end_points = ts[:, None] * dirs
+    plt.scatter(end_points[:, 0], end_points[:, 1], s = 3)
+    plt.show()
+
 if __name__ == "__main__":
     import matplotlib
     matplotlib.use('TKAgg')
-    d = 1
-    T = 4
+    d = 1.1
+    T = 1.5
     g = -0.6
     # # visualize_curves(g, d, T)
-    inverse_cdf_sample(g, d, T)
+    # inverse_cdf_sample(g, d, T)
+    show_path_reuse_samples(T, d)
     # fixed = 45 / 180 * np.pi
     # simulate_conversion(fixed, uniform_cosine = False)
