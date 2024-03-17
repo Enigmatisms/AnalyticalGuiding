@@ -68,7 +68,7 @@ def eval_integrand(samples: torch.Tensor):
         Now, all the training samples can be obtained
     """
     resolution, n_samples, _ = samples.shape
-    sin_thetas = torch.sin(samples[..., -1:])
+    sin_thetas = torch.sin(samples[..., -1:])          # (N, SP_N, 1)
     ray_dirs   = torch.cat([
         torch.cos(samples[..., -2:-1]) * sin_thetas, 
         torch.sin(samples[..., -2:-1]) * sin_thetas, torch.cos(samples[..., -1:])
@@ -80,7 +80,15 @@ def eval_integrand(samples: torch.Tensor):
     
     cos_t1 = (ray_dirs * ori_dirs).sum(dim = -1)          # used in H-G phase function (N, SP_N)
     cos_t2, illum_lens = eval_sec_scat_cos(1, 1 / samples[..., 1], cos_t1)      # the second cosine, and the inverse sqaure distance
-    return ray_dirs, phase_hg_nodiv(cos_t1) * phase_hg_nodiv(cos_t2) / (illum_lens * illum_lens)      # (Resolution, sp_per_dim^3)
+    throughput: torch.Tensor = phase_hg_nodiv(cos_t1) * phase_hg_nodiv(cos_t2) / (illum_lens * illum_lens)      # (Resolution, sp_per_dim^3)
+    
+    # thoughputs should be normalized, this is actually related to Monte Carlo estimation
+    # See 2020 paper Robust Fitting of Parallax-Aware Mixtures for Path Guiding and 
+    # https://computergraphics.stackexchange.com/questions/13969/measure-or-jacobian-conversion-for-direction-sampling
+    throughput *= torch.abs(sin_thetas)
+    throughput /= throughput.mean(dim = -1, keepdim = True)
+    
+    return ray_dirs, throughput
     
 def generate_training_samples(idx_r, g = 0.7, resolution = 256, sp_per_dim = 8):
     """ Get the training samples of a certain row
@@ -102,3 +110,5 @@ def generate_training_samples(idx_r, g = 0.7, resolution = 256, sp_per_dim = 8):
     
     dim4_samples = generate_row(alphas[..., None], div_a, r_s, r_s + div_r, resolution, sp_per_dim)
     return eval_integrand(dim4_samples)
+    
+    
