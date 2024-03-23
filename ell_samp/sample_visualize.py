@@ -24,7 +24,7 @@ def get_options(delayed_parse = False):
     parser.add_argument('-c', '--config',  
                                      is_config_file=True, help='Config file path')
     parser.add_argument("-r", "--resolution",
-                                     default = 1, help = "Resolution of the tabulation (for visualization, set 1)", type = float)
+                                     default = 1, help = "Resolution of the tabulation (for visualization, set 1)", type = int)
 
     parser.add_argument("--it",          default = 1000, help = "iteration number (1000 is 1s, normally)", type = int)
     parser.add_argument("--sp_per_dim",  default = 8,    help = "Sample per dimension (8, or 16)",         type = int)
@@ -41,6 +41,7 @@ def get_options(delayed_parse = False):
     parser.add_argument("--png_name",    default = 'mc_results.png',      help = "Saved image filename",  type = str)
 
     parser.add_argument("--use_inv_sqr", default = False, action = "store_true", help = "Whether to use inverse square")
+    parser.add_argument("--use_sec_phs", default = False, action = "store_true", help = "Whether to use the second phase function")
 
     if delayed_parse:
         return parser
@@ -55,7 +56,8 @@ def visualization(opts):
     sum_time = 0
     for _ in tqdm.tqdm(range(opts.it)):
         start_time = time.time()
-        dim4_samples, throughput = generate_training_samples(0, opts.g, 1, 8, opts.r_start, opts.r_end, opts.alpha_start, opts.alpha_end, True, opts.use_inv_sqr)
+        dim4_samples, throughput = generate_training_samples(0, opts.g, 1, opts.sp_per_dim, opts.r_start, 
+                                            opts.r_end, opts.alpha_start, opts.alpha_end, True, opts.use_inv_sqr, opts.use_sec_phs)
         sum_time  += time.time() - start_time
         
         # returned dim4_samples is of shape: (1, 512, 4)
