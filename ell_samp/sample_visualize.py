@@ -70,6 +70,7 @@ def visualization(opts):
     sum_time /= opts.it
     CONSOLE.log(f"Generate training samples ({opts.sp_per_dim ** 3} samples, {opts.it} iterations): {sum_time * 1000} ms avg.")
     result   /= opts.it
+    result   /= result.max()
     np_result = result.cpu().numpy()
 
     deg_alpha = int(opts.alpha_start * 180 / torch.pi)

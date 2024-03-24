@@ -50,15 +50,17 @@ def get_options(delayed_parse = False):
     parser.add_argument("--summary_mode", 
                                          default = 'datetime', choices=['datetime', 'none'], help = "Summary output mode",  type = str)
 
-    parser.add_argument("--use_inv_sqr", default = False, action = "store_true", help = "Whether to use inverse square")
-    parser.add_argument("--use_sec_phs", default = False, action = "store_true", help = "Whether to use the second phase function")
+    parser.add_argument("--use_inv_sqr",    default = False, action = "store_true", help = "Whether to use inverse square")
+    parser.add_argument("--use_sec_phs",    default = False, action = "store_true", help = "Whether to use the second phase function")
+    parser.add_argument("--no_tensorboard", default = False, action = "store_true", help = "Whether to turn off summary writer")
 
     if delayed_parse:
         return parser
     return parser.parse_args()
 
-def numerical_guard(tensor, threshold=1e-5):
+def numerical_guard(tensor, threshold=1e-6):
     return torch.where(torch.abs(tensor) < threshold, torch.sign(tensor) * threshold, tensor)
+
 
 class MeshedVMM:
     def __init__(self, 
@@ -68,6 +70,7 @@ class MeshedVMM:
         epochs     = 1,  
         log_mode   = "./logs/",
         lr         = 0.5,
+        no_tensorboard = False,
         dtype = torch.float32, device = 'cuda:0'):
         
         samples = torch.rand(resolution, resolution, num_comps, 2, dtype = dtype, device = device)
@@ -79,7 +82,7 @@ class MeshedVMM:
         ], dim = -1)           # make sure the initialized directions are valid
         
         self.rems       = torch.rand(resolution, resolution, num_comps, 2, dtype = dtype, device = device) * 0.5    # kappa and pi
-        self.rems[..., -1] += 0.5
+        self.rems[..., -1]  += 0.5
         self.rems[..., -1:] /= self.rems[..., -1:].sum(dim = -2, keepdim = True)     # (256, 4, 1) / (256, 1, 1) normalization
         
         self.resolution = resolution
@@ -89,10 +92,14 @@ class MeshedVMM:
         self.lr         = lr
         self.dtype      = dtype
         self.device     = device
-        if ANALYZE_CONVERGENCE:
+        self.num_invalids = 0
+        self.no_tensorboard = no_tensorboard
+        if ANALYZE_CONVERGENCE and no_tensorboard == False:
             summary_path = 'logs'
             if log_mode == 'datetime':
-                summary_path = os.path.join(summary_path, datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
+                today = datetime.today()
+                formatted_date = today.strftime('%m-%d')
+                summary_path = os.path.join(summary_path, formatted_date, datetime.now().strftime("%Y-%m-%d-%H-%M-%S"))
             self.writer = SummaryWriter(summary_path)
 
     def exp_step(self, row_idx: int, samples: torch.Tensor) -> torch.Tensor:
@@ -129,36 +136,49 @@ class MeshedVMM:
         # (256, 512, 1, 1) * (256, 512, 4, 1) * (256, 512, 1, 3) -> (256, 512, 4, 3) --sum--> (256, 4, 3)
         weighted_eval = weights[..., None]  * evals      # (256, 512, 4)
         rk      = (weighted_eval[..., None] * dir_samples.unsqueeze(-2)).sum(dim = 1)     # (256, 4, 3)
-        lengths = rk.norm(dim = -1, keepdim = True)                                # (256, 4, 1)
+        lengths = rk.norm(dim = -1)                                                # (256, 4)
         merged_eval = weighted_eval.sum(dim = -2)                                  # (256, 4)
-        bar_rk  = (lengths / merged_eval[..., None]).squeeze(dim = -1)             # (256, 4)
+        bar_rk  = lengths / merged_eval                                            # (256, 4)
         if ANALYZE_CONVERGENCE:
             # calculate the change of variables
-            mean_dirs       = rk / lengths
+            mean_dirs       = rk / lengths[..., None]
+            self.nan_checking(mean_dirs, "mean_dirs")
             old_dirs        = self.mean_dirs[row_idx]
             dirs_param_diff = torch.abs(mean_dirs - old_dirs).mean()     
             self.mean_dirs[row_idx]  = mean_dirs * self.lr + old_dirs * (1 - self.lr)
             self.mean_dirs[row_idx] /= self.mean_dirs[row_idx].norm(dim = -1, keepdim = True)
             
-            new_remes  = torch.stack([
-                bar_rk * (1 + 2 / numerical_guard(1 - bar_rk * bar_rk)),
+            new_rems  = torch.stack([
+                bar_rk * (1 + 2 / (numerical_guard(1 - bar_rk) * (1 + bar_rk))),
                 merged_eval / merged_eval.sum(dim = -1, keepdim = True)
             ], dim = -1)
-            rems_param_diff    = torch.abs(new_remes - self.rems[row_idx]).mean(dim = (0, 1))       # (resolution, num_comps, 2) -> 2
-            self.rems[row_idx] = new_remes * self.lr + self.rems[row_idx] * (1 - self.lr)
+            self.nan_checking(new_rems, "new_rems")
+            rems_param_diff    = torch.abs(new_rems - self.rems[row_idx]).mean(dim = (0, 1))       # (resolution, num_comps, 2) -> 2
+            self.rems[row_idx] = new_rems * self.lr + self.rems[row_idx] * (1 - self.lr)
             
             time_stamp = it_idx + row_idx * self.iter_num
-            self.writer.add_scalar('Param-Diff/Direction', dirs_param_diff,    time_stamp)
-            self.writer.add_scalar('Param-Diff/Kappa',     rems_param_diff[0], time_stamp)
-            self.writer.add_scalar('Param-Diff/Pi',        rems_param_diff[1], time_stamp)
+            if not self.no_tensorboard:
+                self.writer.add_scalar('Param-Diff/Direction', dirs_param_diff,    time_stamp)
+                self.writer.add_scalar('Param-Diff/Kappa',     rems_param_diff[0], time_stamp)
+                self.writer.add_scalar('Param-Diff/Pi',        rems_param_diff[1], time_stamp)
         else:
-            self.mean_dirs[row_idx] = (rk / lengths) * self.lr + self.mean_dirs[row_idx] * (1 - self.lr)
+            self.mean_dirs[row_idx] = (rk / lengths[..., None]) * self.lr + self.mean_dirs[row_idx] * (1 - self.lr)
             self.mean_dirs[row_idx] /= self.mean_dirs[row_idx].norm(dim = -1, keepdim = True)
-            new_remes  = torch.stack([
+            new_rems  = torch.stack([
                 bar_rk * (1 + 2 / numerical_guard(1 - bar_rk * bar_rk)),            # update kappa (disperse), approximated, (256, 4)
                 merged_eval / merged_eval.sum(dim = -1, keepdim = True)             # update pi (256, 4) / (256, 1) -> (256, 4)
             ], dim = -1)
-            self.rems[row_idx] = new_remes * self.lr + self.rems[row_idx] * (1 - self.lr)
+            self.rems[row_idx] = new_rems * self.lr + self.rems[row_idx] * (1 - self.lr)
+            
+    def nan_checking(self, tensor: torch.Tensor, name: str = "mean_dir"):
+        nan_indices = torch.isnan(tensor) | torch.isinf(tensor)
+        if nan_indices.any() == False: return
+        nan_indices_tuple = nan_indices.nonzero()
+        for row in nan_indices_tuple:
+            CONSOLE.log(f"[bold yellow] \"{name}\": {row.cpu().tolist()} contains NaN or Inf [/bold yellow]")
+        tensor[nan_indices] = 0
+        CONSOLE.log(f"\"{name}\": NaNs & Infs are set zero")
+        self.num_invalids += nan_indices_tuple.shape[0]
         
     def train_row(self, row_idx: int, dir_sample: torch.Tensor, weights: torch.Tensor):
         for it_idx in range(self.iter_num):
@@ -196,9 +216,12 @@ class MeshedVMM:
         CONSOLE.log(f"\tHenyey-Greenstein phase function: g = {opts.g}")
         CONSOLE.log(f"\tNumber of samples per VMM: {opts.sp_per_dim ** 3}")
         CONSOLE.log(f"\tTabulation resolution: {self.resolution} × {self.resolution}")
+        CONSOLE.log(f"\tAlpha sampling range: {opts.alpha_start * 180 / torch.pi} - {opts.alpha_end * 180 / torch.pi}")
+        CONSOLE.log(f"\td/T sampling range: {opts.r_start} - {opts.r_end}")
         CONSOLE.log(f"\tNumber of iterations: {opts.it}")
         CONSOLE.log(f"\tNumber of epochs: {opts.epochs}")
-        CONSOLE.log(f"\tConvergence statistics: TODO")
+        CONSOLE.log(f"\tInvalid VMM ratio (before processing): {self.num_invalids / (self.resolution * self.resolution * self.num_comps) * 100}\%")
+        CONSOLE.log(f"\tTraining with double phase function: {opts.use_sec_phs}. With inverse square attenuation: {opts.use_inv_sqr}")
         
 if __name__ == "__main__":
     torch.random.manual_seed(3407)
@@ -210,7 +233,8 @@ if __name__ == "__main__":
         iter_num   = opts.it,
         epochs     = opts.epochs,
         log_mode   = opts.summary_mode,
-        lr         = opts.lr
+        lr         = opts.lr,
+        no_tensorboard = opts.no_tensorboard
     )
 
     vmm_grid.train(opts)
@@ -219,5 +243,7 @@ if __name__ == "__main__":
         os.makedirs(opts.save_folder)
     path = os.path.join(opts.save_folder, opts.save_name)
     vmm_grid.save_params(path)
-    vmm_grid.writer.close()
+    
+    if not opts.no_tensorboard:
+        vmm_grid.writer.close()
     

@@ -72,10 +72,11 @@ def eval_integrand(samples: torch.Tensor, g: float, eval_inv_sqr = True, eval_se
     """
     resolution, n_samples, _ = samples.shape
     sin_thetas = torch.sin(samples[..., -1:])          # (N, SP_N, 1)
+    cos_thetas = torch.cos(samples[..., -1:])
     
     ray_dirs   = torch.cat([
         torch.cos(samples[..., -2:-1]) * sin_thetas, 
-        torch.sin(samples[..., -2:-1]) * sin_thetas, torch.cos(samples[..., -1:])
+        torch.sin(samples[..., -2:-1]) * sin_thetas, cos_thetas
     ], dim = -1)           # (N, SP_N, 3)
     
     ori_dirs   = torch.zeros((resolution, n_samples, 3), **TENSOR_PROP)      # (N, SP_N, 3)
@@ -85,7 +86,7 @@ def eval_integrand(samples: torch.Tensor, g: float, eval_inv_sqr = True, eval_se
     cos_t1 = (ray_dirs * ori_dirs).sum(dim = -1)          # used in H-G phase function (N, SP_N)
     throughput: torch.Tensor = phase_hg_nodiv(g, cos_t1)     # (Resolution, sp_per_dim^3)
     if eval_second_phase:
-        cos_t2, illum_lens = eval_sec_scat_cos(1, 1 / samples[..., 1], cos_t1)      # the second cosine, and the inverse sqaure distance
+        cos_t2, illum_lens = eval_sec_scat_cos(1, 1 / samples[..., 1], cos_thetas.squeeze(dim = -1))      # the second cosine, and the inverse sqaure distance
         throughput *= phase_hg_nodiv(g, cos_t2)
     if eval_inv_sqr:
         throughput /= illum_lens * illum_lens
@@ -94,7 +95,7 @@ def eval_integrand(samples: torch.Tensor, g: float, eval_inv_sqr = True, eval_se
     # See 2020 paper Robust Fitting of Parallax-Aware Mixtures for Path Guiding and 
     # https://computergraphics.stackexchange.com/questions/13969/measure-or-jacobian-conversion-for-direction-sampling
     throughput *= torch.abs(sin_thetas.squeeze(dim = -1))
-    throughput  = torch.clamp_min(throughput, 1e-6)
+    throughput  = torch.clamp_min(throughput, 1e-7)
     throughput /= throughput.mean(dim = -1, keepdim = True)
     
     return ray_dirs, throughput
