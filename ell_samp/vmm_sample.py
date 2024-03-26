@@ -54,13 +54,10 @@ def np_rotation_between(fixed: np.ndarray, target: np.ndarray) -> np.ndarray:
         fixed: 3D vector of R^3
         target: (N, 3) mean direction
     """
-    results = np.zeros((target.shape[0], 3, 3), dtype = np.float32)
     fixed   = fixed[None, :].repeat(target.shape[0], axis = 0)
     axis = np.cross(fixed, target)          # (N, 3)
     dot = np.sum(fixed * target, axis = -1) # (N)
-    parallel_mask = abs(dot) > 1. - 1e-5
-    results[parallel_mask] = np.sign(dot) * np.eye(3, dtype = np.float32)
-    results[~parallel_mask] = np.sign(dot) * np.eye(3, dtype = np.float32)
+    
     # Not in-line, cross product is valid
     axis /= np.linalg.norm(axis, axis = -1, keepdims = True)
     axis *= np.arccos(dot)[..., None]
