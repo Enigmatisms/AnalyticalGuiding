@@ -77,47 +77,50 @@ def generate_row(T_grid, T_div, r_s, r_e,
     
     # stratified sampling i
     theta_res  = torch.pi / quantize_num
-    tht_qunat  = torch.arange(quantize_num, **TENSOR_PROP) * theta_res
-    tht_qunat += torch.rand(quantize_num, **TENSOR_PROP) * theta_res
-    tht_qunat  = tht_qunat[None, :, None].expand(resolution, -1, avg_smp_num)       # (128, 256, 8)
+    tht_quant  = torch.arange(quantize_num, **TENSOR_PROP) * theta_res
+    tht_quant += torch.rand(quantize_num, **TENSOR_PROP) * theta_res
+    tht_quant  = tht_quant[None, :, None].expand(resolution, -1, avg_smp_num)       # (128, 256, 8)
    
     rd_sample[..., 0] = rd_sample[..., 0] * (r_e - r_s) + r_s         # uniform in row d/T ratio start and ratio end  -> d/T
     rd_sample[..., 1] = rd_sample[..., 1] * T_div + T_grid            # uniform in [0, T] -> T
     # generate phi_theta_samples
     rd_sample[..., 0] *= rd_sample[..., 1]                                  # d/T converted to d
     rd_sample = rd_sample.unsqueeze(1).expand(-1, quantize_num, -1, -1)     # (128, 256, 8, 2)
-    rd_sample = torch.cat([rd_sample, tht_qunat[..., None]], dim = -1)      # (128, 256, 8, 3) -> (d, T, theta)
+    rd_sample = torch.cat([rd_sample, tht_quant[..., None]], dim = -1)      # (128, 256, 8, 3) -> (d, T, theta)
+    polar_dists = ellipse_polar_distance(rd_sample)
     
     # stratified sampling ii (distributed more uniformly)
     mc_res      = 1 / mc_smp_num
     mc_samples  = torch.arange(mc_smp_num, **TENSOR_PROP) * mc_res
     mc_samples += torch.rand(mc_smp_num, **TENSOR_PROP) * mc_res                     # Monte Carlo integration estimation (128)
-    polar_dists = ellipse_polar_distance(rd_sample)
     
     mc_samples = mc_samples[None, None, None, :].expand(resolution, quantize_num, avg_smp_num, -1)      # (1, 1, 1, 128) -> (128, 256, 8, 128)
 
     mc_samples = mc_samples * polar_dists                       # mc_sample (128, 256, 8, 128)
     
-    # returned size: (1) d, T, theta (128, 256 * 8, 3), (2) mc samples (128, 256 * 8, 128)
-    return rd_sample.reshape(resolution, -1, 3), mc_samples.reshape(resolution, -1, mc_smp_num)
+    # returned size: (1) d, T, theta (128, 256, 8, 3), (2) mc samples (128, 256, 8, 128) (3) polar_dists is 1 / PDF (128, 256, 8, 1)
+    return rd_sample, mc_samples, polar_dists
 
-def mc_integration(infos: torch.Tensor, samples: torch.Tensor, sigma_t: float, sigma_a: float, D: float):
+def mc_integration(infos: torch.Tensor, samples: torch.Tensor, 
+        inv_pdf: torch.Tensor, sigma_t: float, sigma_a: float, D: float) -> torch.Tensor:
     """
     Args:
-        infos (torch.Tensor): shape (128, 256 * 8, 3)
-        samples (torch.Tensor): shape (128, 256 * 8, 128)
+        infos (torch.Tensor): shape (128, 256, 8, 3)
+        samples (torch.Tensor): shape (128, 256, 8, 128)
         sigma_s (float): _description_
         sigma_a (float): _description_
+        
+        return: shape (128, 256)
     """
     D4 = 4 * D
     # d projected onto the sampling direction line (length)
-    proj_len   = infos[..., 0] * torch.cos(infos[..., 1])     # (128, 256 * 8)
+    proj_len   = infos[..., 0] * torch.cos(infos[..., 2])     # (128, 256, 8)
     # emitter to sampling direction line distance
-    line_dist2 = infos[..., 0] ** 2 - proj_len ** 2           # (128, 256 * 8)
+    line_dist2 = infos[..., 0] ** 2 - proj_len ** 2           # (128, 256, 8)
     # distance (^2) to the target vertex (or emitter)
-    d2 = (proj_len[..., None] - samples) ** 2 + line_dist2[..., None] #  (128, 256 * 8, 128)
+    d2 = (proj_len[..., None] - samples) ** 2 + line_dist2[..., None] #  (128, 256, 8, 128)
     # residual time (T - t)
-    res_time = infos[..., 1:2] - samples                      # should all be greater than 0, shape (128, 256 * 8, 1) - (128, 256 * 8, 128)
+    res_time = infos[..., 1:2] - samples                      # should all be greater than 0, shape (128, 256, 8, 1) - (128, 256, 8, 128)
 
     # 1 / [4piD(S - t)]^(3/2)
     # condition_checking(res_time, 'res_time', lambda x: x <= 0, 'Non-positive')
@@ -128,7 +131,7 @@ def mc_integration(infos: torch.Tensor, samples: torch.Tensor, sigma_t: float, s
     # Lis is the evaluated DA * transmittance 
     # this can be fused to get faster, either through triton or CUDA
     # returned shape (128, 256)     # MC evaluated
-    return (1 / coeff * torch.exp(- d2 / (res_time ** 2) / D4 - sigma_a * res_time - sigma_t * samples)).mean()
+    return (inv_pdf / coeff * torch.exp(- d2 / (res_time * D4) - sigma_a * res_time - sigma_t * samples)).mean(dim = (-1, -2))
 
 def tabulate_row(row_id: int, sigma_a: float, sigma_s: float,g : float, T_max: float, 
                 mc_iter: 4, resolution = 128, avg_smp_num = 8, mc_smp_num = 128, quantize_num = 256) -> torch.Tensor:
@@ -141,8 +144,8 @@ def tabulate_row(row_id: int, sigma_a: float, sigma_s: float,g : float, T_max: f
     
     result = torch.zeros(resolution, quantize_num, **TENSOR_PROP)
     for _ in range(mc_iter):
-        infos, mc_samples = generate_row(T_grid, T_div, r_start, r_end, resolution, avg_smp_num, mc_smp_num, quantize_num)
-        result += mc_integration(infos, mc_samples, sigma_s + sigma_a, sigma_a, D)
+        infos, mc_samples, inv_pdf = generate_row(T_grid, T_div, r_start, r_end, resolution, avg_smp_num, mc_smp_num, quantize_num)
+        result += mc_integration(infos, mc_samples, inv_pdf, sigma_s + sigma_a, sigma_a, D)
     condition_checking(result, "MC integral")
     return result * (1 / mc_iter)
 
