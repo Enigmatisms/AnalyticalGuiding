@@ -33,6 +33,8 @@ def get_options(delayed_parse = False):
     parser.add_argument("--sigma_s",      default = 0.3,    help = "Scattering coefficient", type = float)
     parser.add_argument("--hg_g",         default = 0.0,    help = "H-G phase value",        type = float)
     parser.add_argument("--T_max",        default = 10,     help = "Maximum target time",    type = float)
+    parser.add_argument("--r_s",          default = 0.2,    help = "d/T start (d/T too small will lead to uniform distribution)", type = float)
+    parser.add_argument("--r_e",          default = 0.999,  help = "d/T end (can't be close to 1, otherwise will result in numerical problems)", type = float)
 
     parser.add_argument("--table_folder", default = './tables/',       help = "Saved model path", type = str)
     parser.add_argument("--table_name",   default = 'table.npy',       help = "Saved model name",  type = str)
@@ -93,10 +95,8 @@ def generate_row(T_grid, T_div, r_s, r_e,
     mc_res      = 1 / mc_smp_num
     mc_samples  = torch.arange(mc_smp_num, **TENSOR_PROP) * mc_res
     mc_samples += torch.rand(mc_smp_num, **TENSOR_PROP) * mc_res                     # Monte Carlo integration estimation (128)
-    
-    mc_samples = mc_samples[None, None, None, :].expand(resolution, quantize_num, avg_smp_num, -1)      # (1, 1, 1, 128) -> (128, 256, 8, 128)
-
-    mc_samples = mc_samples * polar_dists                       # mc_sample (128, 256, 8, 128)
+    mc_samples  = mc_samples[None, None, None, :].expand(resolution, quantize_num, avg_smp_num, -1)      # (1, 1, 1, 128) -> (128, 256, 8, 128)
+    mc_samples  = mc_samples * polar_dists                       # mc_sample (128, 256, 8, 128)
     
     # returned size: (1) d, T, theta (128, 256, 8, 3), (2) mc samples (128, 256, 8, 128) (3) polar_dists is 1 / PDF (128, 256, 8, 1)
     return rd_sample, mc_samples, polar_dists
@@ -105,6 +105,7 @@ def mc_integration(infos: torch.Tensor, samples: torch.Tensor,
         inv_pdf: torch.Tensor, sigma_t: float, sigma_a: float, D: float) -> torch.Tensor:
     """
     Args:
+        d T theta
         infos (torch.Tensor): shape (128, 256, 8, 3)
         samples (torch.Tensor): shape (128, 256, 8, 128)
         sigma_s (float): _description_
@@ -134,9 +135,10 @@ def mc_integration(infos: torch.Tensor, samples: torch.Tensor,
     return (inv_pdf / coeff * torch.exp(- d2 / (res_time * D4) - sigma_a * res_time - sigma_t * samples)).mean(dim = (-1, -2))
 
 def tabulate_row(row_id: int, sigma_a: float, sigma_s: float,g : float, T_max: float, 
-                mc_iter: 4, resolution = 128, avg_smp_num = 8, mc_smp_num = 128, quantize_num = 256) -> torch.Tensor:
-    r_div   = 0.999 / resolution
-    r_start = r_div * row_id
+                r_s: float, r_e: float, mc_iter: int = 4, resolution: int = 128, 
+                avg_smp_num: int = 8, mc_smp_num: int = 128, quantize_num: int = 256) -> torch.Tensor:
+    r_div   = (r_e - r_s) / resolution
+    r_start = r_div * row_id + r_s
     r_end   = r_start + r_div
     T_div   = T_max / resolution
     T_grid  = torch.arange(resolution, **TENSOR_PROP).unsqueeze(-1)
@@ -154,8 +156,9 @@ def tabulation(opts):
     start_time = time.time()
     for row_id in tqdm.tqdm(range(opts.resolution)):
         # returned shape: (128, 256)
-        row_result = tabulate_row(row_id, opts.sigma_a, opts.sigma_s, opts.hg_g, opts.T_max, opts.mc_iter, 
-                                opts.resolution, opts.avg_smp_num, opts.mc_smp_num, opts.quantize_num)
+        row_result = tabulate_row(row_id, opts.sigma_a, opts.sigma_s, opts.hg_g, opts.T_max, 
+                                  opts.r_s, opts.r_e, opts.mc_iter, opts.resolution, 
+                                  opts.avg_smp_num, opts.mc_smp_num, opts.quantize_num)
         condition_checking(row_result, "row_result")
         # convert to CDF
         row_result = torch.cumsum(row_result, dim = -1)         # accumulation
@@ -171,6 +174,7 @@ def tabulation(opts):
     CONSOLE.log(f"\tNumber of MC samples: {opts.mc_smp_num} × {opts.mc_iter} = {opts.mc_iter * opts.mc_smp_num}")
     CONSOLE.log(f"\tNumber of blurring samples: {opts.avg_smp_num} × {opts.mc_iter} = {opts.mc_iter * opts.avg_smp_num}")
     CONSOLE.log(f"\tTabulation resolution: {opts.resolution} × {opts.resolution}")
+    CONSOLE.log(f"\td/T tabulation interval: [{opts.r_s:.3f}, {opts.r_e:.3f}]")
     CONSOLE.log(f"\tScattering & absorption coefficients: {opts.sigma_s:.4f} | {opts.sigma_a:.4f}")
     CONSOLE.log(f"\td/T upper bound: {opts.T_max}")
     
